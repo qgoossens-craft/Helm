@@ -605,7 +605,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
               ))}
 
               {documents.length === 0 && (
-                <p className="text-sm text-helm-text-muted text-center py-4">
+                <p className="text-sm text-helm-text-muted py-2">
                   No documents attached
                 </p>
               )}
@@ -613,7 +613,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
               <button
                 onClick={handleUploadDocument}
                 disabled={isUploading}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
                   <>

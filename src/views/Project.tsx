@@ -6,12 +6,12 @@ import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
-type TaskFilter = 'all' | 'todo' | 'in_progress' | 'done'
+type TaskFilter = 'all' | 'active' | 'todo' | 'in_progress' | 'done'
 
 export function Project() {
   const { id } = useParams<{ id: string }>()
   const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>('active')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -53,12 +53,14 @@ export function Project() {
   // Filter tasks based on selected filter
   const filteredTasks = useMemo(() => {
     if (taskFilter === 'all') return projectTasks
+    if (taskFilter === 'active') return projectTasks.filter((t) => t.status === 'todo' || t.status === 'in_progress')
     return projectTasks.filter((t) => t.status === taskFilter)
   }, [projectTasks, taskFilter])
 
   // Count tasks by status for filter badges
   const taskCounts = useMemo(() => ({
     all: projectTasks.length,
+    active: projectTasks.filter((t) => t.status === 'todo' || t.status === 'in_progress').length,
     todo: projectTasks.filter((t) => t.status === 'todo').length,
     in_progress: projectTasks.filter((t) => t.status === 'in_progress').length,
     done: projectTasks.filter((t) => t.status === 'done').length
@@ -194,9 +196,9 @@ export function Project() {
   }
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex h-full">
       {/* Main content - Task list or Kanban */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-auto p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-helm-text truncate">{project.name}</h1>
@@ -225,6 +227,7 @@ export function Project() {
           <Filter size={14} className="text-helm-text-muted mr-1" />
           {([
             { value: 'all', label: 'All' },
+            { value: 'active', label: 'Active' },
             { value: 'todo', label: 'To Do' },
             { value: 'in_progress', label: 'In Progress' },
             { value: 'done', label: 'Done' }
@@ -315,7 +318,7 @@ export function Project() {
 
       {/* Right panel - Project info (hidden when task selected) */}
       {!selectedTask && (
-      <aside className="w-80 flex-shrink-0 border-l border-helm-border pl-6">
+      <aside className="w-80 flex-shrink-0 p-6 overflow-auto">
         <div className="space-y-6">
           {/* Status */}
           <div>
@@ -590,13 +593,13 @@ function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewPro
   }
 
   return (
-    <div className="flex-1 flex gap-4 overflow-x-auto pb-4">
+    <div className="flex-1 flex gap-4 pb-4">
       {columns.map((column) => {
         const columnTasks = tasks.filter((t) => t.status === column.id)
         return (
           <div
             key={column.id}
-            className="flex-shrink-0 w-72 bg-helm-surface rounded-lg p-4 flex flex-col"
+            className="flex-1 min-w-0 bg-helm-surface rounded-lg p-4 flex flex-col"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, column.id)}
           >

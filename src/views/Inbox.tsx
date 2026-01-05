@@ -63,7 +63,8 @@ export function Inbox() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-6">Inbox</h1>
 
       {/* Quick capture input */}
@@ -109,6 +110,7 @@ export function Inbox() {
 
       {/* Move to project modal */}
       <MoveToProjectModal projects={projects.filter((p) => !p.archived_at)} />
+      </div>
     </div>
   )
 }

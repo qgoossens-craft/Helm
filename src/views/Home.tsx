@@ -33,7 +33,8 @@ export function Home() {
   const workTodos = todos.filter((t) => t.list === 'work' && !t.completed).slice(0, 3)
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-2">
         {greeting}, {userName}.
       </h1>
@@ -180,6 +181,7 @@ export function Home() {
         >
           Enter Focus Mode
         </Link>
+      </div>
       </div>
     </div>
   )

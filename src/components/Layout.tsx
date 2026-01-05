@@ -1,12 +1,16 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo } from 'lucide-react'
 import { useEffect } from 'react'
 import { useProjectsStore, useUIStore } from '../store'
 
 export function Layout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { projects, fetchProjects } = useProjectsStore()
   const { openCopilot, openKickoffWizard } = useUIStore()
+
+  // Check if we're on a project page (for right panel border)
+  const isProjectPage = location.pathname.startsWith('/project/')
 
   // Fetch projects on mount
   useEffect(() => {
@@ -100,7 +104,12 @@ export function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Right panel border - only on project pages */}
+        {isProjectPage && (
+          <div className="absolute right-80 top-0 bottom-0 w-px bg-helm-border" />
+        )}
+
         {/* Top bar with drag region */}
         <div className="h-12 drag-region flex items-center justify-end px-4">
           <button
@@ -109,12 +118,13 @@ export function Layout() {
           >
             <Sparkles size={16} />
             <span>Jeeves</span>
-            <kbd className="text-xs text-helm-text-muted/60 px-1.5 py-0.5 rounded border border-helm-border">⌘K</kbd>
+            <kbd className="text-xs text-helm-text-muted/60 px-1 py-0.5 rounded border border-helm-border">⌘</kbd>
+            <kbd className="text-xs text-helm-text-muted/60 px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
           </button>
         </div>
 
         {/* Page content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-hidden">
           <Outlet />
         </div>
       </main>

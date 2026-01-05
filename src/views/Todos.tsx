@@ -68,7 +68,8 @@ export function Todos() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-6">Quick Todos</h1>
 
       {/* List tabs */}
@@ -154,6 +155,7 @@ export function Todos() {
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   )

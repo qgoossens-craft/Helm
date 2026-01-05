@@ -51,7 +51,8 @@ export function Settings() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-8">Settings</h1>
 
       <div className="space-y-8">
@@ -179,6 +180,7 @@ export function Settings() {
             'Save Settings'
           )}
         </button>
+      </div>
       </div>
     </div>
   )
