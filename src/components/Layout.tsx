@@ -101,14 +101,14 @@ export function Layout() {
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar with drag region */}
-        <div className="h-12 drag-region border-b border-helm-border flex items-center justify-end px-4">
+        <div className="h-12 drag-region flex items-center justify-end px-4">
           <button
-            className="no-drag flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface hover:bg-helm-surface-elevated text-sm text-helm-text-muted hover:text-helm-text transition-colors"
+            className="no-drag flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-helm-surface text-sm text-helm-text-muted hover:text-helm-text transition-colors"
             onClick={() => openCopilot()}
           >
             <Sparkles size={16} />
             <span>Jeeves</span>
-            <kbd className="text-xs bg-helm-bg px-1.5 py-0.5 rounded">⌘K</kbd>
+            <kbd className="text-xs text-helm-text-muted/60 px-1.5 py-0.5 rounded border border-helm-border">⌘K</kbd>
           </button>
         </div>
 

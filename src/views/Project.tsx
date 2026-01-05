@@ -1,15 +1,17 @@
 import { useParams, Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
+type TaskFilter = 'all' | 'todo' | 'in_progress' | 'done'
 
 export function Project() {
   const { id } = useParams<{ id: string }>()
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>('all')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -19,7 +21,7 @@ export function Project() {
 
   const { projects, fetchProjects } = useProjectsStore()
   const { tasks, fetchTasksByProject, createTask, updateTask, deleteTask } = useTasksStore()
-  const { openCopilot, addToast } = useUIStore()
+  const { addToast } = useUIStore()
 
   useEffect(() => {
     fetchProjects()
@@ -48,12 +50,26 @@ export function Project() {
   const project = projects.find((p) => p.id === id)
   const projectTasks = tasks.filter((t) => t.project_id === id && !t.parent_task_id)
 
+  // Filter tasks based on selected filter
+  const filteredTasks = useMemo(() => {
+    if (taskFilter === 'all') return projectTasks
+    return projectTasks.filter((t) => t.status === taskFilter)
+  }, [projectTasks, taskFilter])
+
+  // Count tasks by status for filter badges
+  const taskCounts = useMemo(() => ({
+    all: projectTasks.length,
+    todo: projectTasks.filter((t) => t.status === 'todo').length,
+    in_progress: projectTasks.filter((t) => t.status === 'in_progress').length,
+    done: projectTasks.filter((t) => t.status === 'done').length
+  }), [projectTasks])
+
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newTaskTitle.trim() || !id) return
 
     try {
-      await createTask({
+      const newTask = await createTask({
         project_id: id,
         parent_task_id: null,
         title: newTaskTitle.trim(),
@@ -61,9 +77,9 @@ export function Project() {
         status: 'todo',
         order: projectTasks.length
       })
-      addToast('success', 'Task added')
       setNewTaskTitle('')
       setIsAddingTask(false)
+      setSelectedTask(newTask)
     } catch (err) {
       addToast('error', (err as Error).message)
     }
@@ -182,7 +198,7 @@ export function Project() {
       {/* Main content - Task list or Kanban */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-helm-text truncate">{project.name}</h1>
 
           {/* View toggle */}
@@ -202,6 +218,32 @@ export function Project() {
               <LayoutGrid size={18} />
             </button>
           </div>
+        </div>
+
+        {/* Task filter tabs */}
+        <div className="flex items-center gap-1 mb-4">
+          <Filter size={14} className="text-helm-text-muted mr-1" />
+          {([
+            { value: 'all', label: 'All' },
+            { value: 'todo', label: 'To Do' },
+            { value: 'in_progress', label: 'In Progress' },
+            { value: 'done', label: 'Done' }
+          ] as const).map((filter) => (
+            <button
+              key={filter.value}
+              onClick={() => setTaskFilter(filter.value)}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                taskFilter === filter.value
+                  ? 'bg-helm-primary text-white'
+                  : 'bg-helm-surface text-helm-text-muted hover:text-helm-text'
+              }`}
+            >
+              {filter.label}
+              <span className={`ml-1.5 ${taskFilter === filter.value ? 'text-white/70' : 'text-helm-text-muted'}`}>
+                {taskCounts[filter.value]}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Add task input */}
@@ -247,14 +289,14 @@ export function Project() {
         {/* Task list or Kanban */}
         {viewMode === 'list' ? (
           <ListView
-            tasks={projectTasks}
+            tasks={filteredTasks}
             onToggle={handleToggleStatus}
             onDelete={handleDeleteTask}
             onSelect={setSelectedTask}
           />
         ) : (
           <KanbanView
-            tasks={projectTasks}
+            tasks={filteredTasks}
             onUpdateStatus={handleUpdateTaskStatus}
             onDelete={handleDeleteTask}
             onSelect={setSelectedTask}
@@ -271,7 +313,7 @@ export function Project() {
         />
       )}
 
-      {/* Right panel - Project info & Jeeves (hidden when task selected) */}
+      {/* Right panel - Project info (hidden when task selected) */}
       {!selectedTask && (
       <aside className="w-80 flex-shrink-0 border-l border-helm-border pl-6">
         <div className="space-y-6">
@@ -411,21 +453,6 @@ export function Project() {
             )}
           </div>
 
-          {/* Jeeves */}
-          <div className="p-4 bg-helm-surface rounded-lg border border-helm-border">
-            <h3 className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-3">
-              Jeeves
-            </h3>
-            <p className="text-sm text-helm-text-muted mb-4">
-              Need help breaking down tasks or figuring out next steps?
-            </p>
-            <button
-              onClick={() => openCopilot({ projectId: id })}
-              className="w-full px-4 py-2 bg-helm-primary hover:bg-helm-primary-hover text-white text-sm rounded-lg transition-colors"
-            >
-              Ask for help
-            </button>
-          </div>
         </div>
       </aside>
       )}

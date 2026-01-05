@@ -94,6 +94,7 @@ function registerIpcHandlers(): void {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile'],
       filters: [
+        { name: 'All Supported', extensions: ['pdf', 'docx', 'txt', 'md', 'png', 'jpg', 'jpeg', 'gif', 'webp'] },
         { name: 'Documents', extensions: ['pdf', 'docx', 'txt', 'md'] },
         { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }
       ]
@@ -117,6 +118,22 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('documents:search', async (_, query: string, projectId?: string, taskId?: string) => {
     return documents.searchDocuments(query, { projectId, taskId })
+  })
+
+  ipcMain.handle('documents:uploadFromClipboard', async (_, base64Data: string, mimeType: string, taskId: string | null, projectId: string | null) => {
+    return documents.processClipboardUpload(base64Data, mimeType, taskId, projectId)
+  })
+
+  ipcMain.handle('documents:getFilePath', async (_, documentId: string) => {
+    return documents.getDocumentFilePath(documentId)
+  })
+
+  ipcMain.handle('documents:getDataUrl', async (_, documentId: string) => {
+    return documents.getDocumentDataUrl(documentId)
+  })
+
+  ipcMain.handle('documents:rename', async (_, documentId: string, newName: string) => {
+    return documents.renameDocument(documentId, newName)
   })
 
   // AI Operations

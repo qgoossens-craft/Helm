@@ -1,10 +1,11 @@
 import OpenAI from 'openai'
 import { db, getDocumentsPath } from '../database/db'
 import { join, extname, basename } from 'path'
-import { copyFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, statSync } from 'fs'
+import { copyFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, statSync, writeFileSync } from 'fs'
 import pdfParse from 'pdf-parse'
 import mammoth from 'mammoth'
 import Tesseract from 'tesseract.js'
+import { randomUUID } from 'crypto'
 
 // Chunking configuration
 const CHUNK_SIZE = 500 // target tokens per chunk
@@ -279,6 +280,54 @@ export async function searchDocuments(
   }))
 }
 
+// Get the stored file path for a document
+export function getDocumentFilePath(documentId: string): string | null {
+  const documentsPath = getDocumentsPath()
+  const docDir = join(documentsPath, documentId)
+
+  // Check for common extensions
+  const extensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.docx', '.txt', '.md']
+  for (const ext of extensions) {
+    const filePath = join(docDir, `original${ext}`)
+    if (existsSync(filePath)) {
+      return filePath
+    }
+  }
+
+  return null
+}
+
+// Get document as base64 data URL for preview
+export function getDocumentDataUrl(documentId: string): string | null {
+  const filePath = getDocumentFilePath(documentId)
+  if (!filePath) return null
+
+  try {
+    const buffer = readFileSync(filePath)
+    const base64 = buffer.toString('base64')
+    const ext = extname(filePath).toLowerCase()
+
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+
+    const mimeType = mimeTypes[ext] || 'application/octet-stream'
+    return `data:${mimeType};base64,${base64}`
+  } catch (err) {
+    console.error('Failed to read file:', err)
+    return null
+  }
+}
+
+// Rename a document
+export function renameDocument(documentId: string, newName: string): void {
+  db.documents.updateName(documentId, newName)
+}
+
 // Delete document and all associated data
 export function deleteDocument(documentId: string): void {
   // Delete chunks (embeddings cascade via foreign key)
@@ -293,4 +342,106 @@ export function deleteDocument(documentId: string): void {
 
   // Delete document record
   db.documents.delete(documentId)
+}
+
+// Process clipboard image upload (base64 data)
+export async function processClipboardUpload(
+  base64Data: string,
+  mimeType: string,
+  taskId: string | null,
+  projectId: string | null
+): Promise<ProcessResult> {
+  // Determine file extension from mime type
+  const extMap: Record<string, string> = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/gif': '.gif',
+    'image/webp': '.webp'
+  }
+  const ext = extMap[mimeType] || '.png'
+
+  // Generate unique filename
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const fileName = `screenshot-${timestamp}${ext}`
+
+  // Write base64 to temp file
+  const tempPath = join(getDocumentsPath(), `temp-${randomUUID()}${ext}`)
+
+  try {
+    // Decode base64 and write to file
+    const buffer = Buffer.from(base64Data, 'base64')
+
+    // Check file size (50MB limit)
+    if (buffer.length > 50 * 1024 * 1024) {
+      return { success: false, documentId: '', error: 'Image too large (max 50MB)' }
+    }
+
+    // Ensure documents directory exists
+    const documentsPath = getDocumentsPath()
+    if (!existsSync(documentsPath)) {
+      mkdirSync(documentsPath, { recursive: true })
+    }
+
+    writeFileSync(tempPath, buffer)
+
+    // Create document record
+    const document = db.documents.create({
+      project_id: projectId,
+      task_id: taskId,
+      name: fileName,
+      file_path: '',
+      file_type: mimeType,
+      file_size: buffer.length
+    })
+
+    // Copy to permanent storage
+    const docDir = join(documentsPath, document.id)
+    if (!existsSync(docDir)) {
+      mkdirSync(docDir, { recursive: true })
+    }
+    const storedPath = join(docDir, `original${ext}`)
+    copyFileSync(tempPath, storedPath)
+
+    // Clean up temp file
+    unlinkSync(tempPath)
+
+    // Update status to processing
+    db.documents.updateStatus(document.id, 'processing')
+
+    // Extract text via OCR
+    const extractedText = await extractText(storedPath, mimeType)
+
+    if (!extractedText.trim()) {
+      db.documents.updateStatus(document.id, 'completed', undefined, '')
+      return { success: true, documentId: document.id }
+    }
+
+    // Chunk the text
+    const chunks = chunkText(extractedText)
+
+    // Store chunks and generate embeddings
+    for (const chunk of chunks) {
+      const storedChunk = db.chunks.create({
+        document_id: document.id,
+        chunk_index: chunk.index,
+        content: chunk.content,
+        token_count: chunk.tokenCount
+      })
+
+      const embedding = await generateEmbedding(chunk.content)
+      if (embedding) {
+        db.embeddings.store(storedChunk.id, embedding)
+      }
+    }
+
+    db.documents.updateStatus(document.id, 'completed', undefined, extractedText)
+    return { success: true, documentId: document.id }
+  } catch (error) {
+    // Clean up temp file if it exists
+    if (existsSync(tempPath)) {
+      unlinkSync(tempPath)
+    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, documentId: '', error: errorMessage }
+  }
 }

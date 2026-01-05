@@ -582,6 +582,11 @@ export const db = {
       stmt.run(status, error || null, extractedText || null, id)
     },
 
+    updateName(id: string, name: string): void {
+      const stmt = getDb().prepare('UPDATE documents SET name = ? WHERE id = ?')
+      stmt.run(name, id)
+    },
+
     delete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM documents WHERE id = ?')
       stmt.run(id)

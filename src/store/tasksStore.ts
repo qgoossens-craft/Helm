@@ -27,8 +27,12 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   fetchTasksByProject: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const tasks = await window.api.tasks.getByProject(projectId)
-      set({ tasks, isLoading: false })
+      const fetchedTasks = await window.api.tasks.getByProject(projectId)
+      set((state) => {
+        // Remove old tasks for this project and add the new ones
+        const otherTasks = state.tasks.filter((t) => t.project_id !== projectId)
+        return { tasks: [...otherTasks, ...fetchedTasks], isLoading: false }
+      })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
     }

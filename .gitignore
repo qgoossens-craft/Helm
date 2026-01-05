@@ -31,3 +31,6 @@ release
 .env
 .env.local
 .env.*.local
+
+# Tesseract language data (downloaded automatically)
+*.traineddata

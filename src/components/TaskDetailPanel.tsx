@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil } from 'lucide-react'
 import { useTasksStore, useUIStore } from '../store'
 import type { Task, Document } from '../types/global'
+
+interface PreviewState {
+  isOpen: boolean
+  dataUrl: string | null
+  fileName: string
+  fileType: string
+}
+
+interface RenameState {
+  documentId: string | null
+  name: string
+}
 
 interface TaskDetailPanelProps {
   task: Task
@@ -21,6 +33,16 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const [showDocuments, setShowDocuments] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [preview, setPreview] = useState<PreviewState>({
+    isOpen: false,
+    dataUrl: null,
+    fileName: '',
+    fileType: ''
+  })
+  const [renaming, setRenaming] = useState<RenameState>({
+    documentId: null,
+    name: ''
+  })
 
   const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
   const { addToast } = useUIStore()
@@ -60,6 +82,22 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [title, description, status])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        // If preview is open, close it instead of the panel
+        if (preview.isOpen) {
+          closePreview()
+          return
+        }
+        handleSave()
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [title, description, status, onClose, preview.isOpen])
 
   const handleSave = async () => {
     if (title === task.title && description === (task.description || '') && status === task.status) {
@@ -191,6 +229,108 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     setTimeout(checkStatus, 500)
   }
 
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (!file) continue
+
+        setIsUploading(true)
+        try {
+          // Convert file to base64
+          const buffer = await file.arrayBuffer()
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          )
+
+          const result = await window.api.documents.uploadFromClipboard(
+            base64,
+            file.type,
+            task.id,
+            projectId
+          )
+
+          if (result.success) {
+            const docs = await window.api.documents.getByTask(task.id)
+            setDocuments(docs)
+            addToast('success', 'Screenshot attached')
+            pollDocumentStatus(result.documentId)
+          } else {
+            addToast('error', result.error || 'Failed to upload screenshot')
+          }
+        } catch (err) {
+          addToast('error', 'Failed to upload screenshot')
+        } finally {
+          setIsUploading(false)
+        }
+        break
+      }
+    }
+  }
+
+  const handlePreviewDocument = async (doc: Document) => {
+    // Only preview images
+    if (!doc.file_type.startsWith('image/')) {
+      addToast('info', 'Preview only available for images')
+      return
+    }
+
+    try {
+      const dataUrl = await window.api.documents.getDataUrl(doc.id)
+      if (dataUrl) {
+        setPreview({
+          isOpen: true,
+          dataUrl,
+          fileName: doc.name,
+          fileType: doc.file_type
+        })
+      } else {
+        addToast('error', 'File not found')
+      }
+    } catch (err) {
+      addToast('error', 'Failed to load preview')
+    }
+  }
+
+  const closePreview = () => {
+    setPreview({ isOpen: false, dataUrl: null, fileName: '', fileType: '' })
+  }
+
+  const handleStartRename = (doc: Document, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRenaming({ documentId: doc.id, name: doc.name })
+  }
+
+  const handleRename = async () => {
+    if (!renaming.documentId || !renaming.name.trim()) {
+      setRenaming({ documentId: null, name: '' })
+      return
+    }
+
+    try {
+      await window.api.documents.rename(renaming.documentId, renaming.name.trim())
+      setDocuments(prev =>
+        prev.map(d => d.id === renaming.documentId ? { ...d, name: renaming.name.trim() } : d)
+      )
+      addToast('success', 'Document renamed')
+    } catch (err) {
+      addToast('error', 'Failed to rename document')
+    }
+    setRenaming({ documentId: null, name: '' })
+  }
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRename()
+    } else if (e.key === 'Escape') {
+      setRenaming({ documentId: null, name: '' })
+    }
+  }
+
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith('image/')) return <Image size={16} />
     if (fileType.includes('pdf') || fileType.includes('document')) return <FileText size={16} />
@@ -214,7 +354,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   return (
     <div
       ref={panelRef}
-      className="w-96 h-full bg-helm-surface border-l border-helm-border flex flex-col animate-slide-in-right"
+      className="w-80 h-full bg-helm-surface border-l border-helm-border flex flex-col animate-slide-in-right"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-helm-border">
@@ -276,9 +416,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={handleSave}
+            onPaste={handlePaste}
             rows={4}
             className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors resize-none"
-            placeholder="Add a description..."
+            placeholder="Add a description... (paste screenshots here)"
           />
         </div>
 
@@ -388,7 +529,34 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
                 >
                   <span className="text-helm-text-muted">{getFileIcon(doc.file_type)}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-helm-text truncate">{doc.name}</p>
+                    {renaming.documentId === doc.id ? (
+                      <input
+                        type="text"
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                        onBlur={handleRename}
+                        onKeyDown={handleRenameKeyDown}
+                        autoFocus
+                        className="w-full text-sm text-helm-text bg-helm-surface border border-helm-primary rounded px-1 outline-none"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <p
+                        className={`text-sm text-helm-text truncate ${
+                          doc.file_type.startsWith('image/') && doc.processing_status === 'completed'
+                            ? 'cursor-pointer hover:text-helm-primary'
+                            : ''
+                        }`}
+                        onClick={() => {
+                          if (doc.file_type.startsWith('image/') && doc.processing_status === 'completed') {
+                            handlePreviewDocument(doc)
+                          }
+                        }}
+                        title={doc.file_type.startsWith('image/') ? 'Click to preview' : doc.name}
+                      >
+                        {doc.name}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2">
                       <p className="text-xs text-helm-text-muted">{formatFileSize(doc.file_size)}</p>
                       {doc.processing_status === 'pending' && (
@@ -418,7 +586,17 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDeleteDocument(doc.id)}
+                    onClick={(e) => handleStartRename(doc, e)}
+                    className="p-1 text-helm-text-muted hover:text-helm-primary opacity-0 group-hover:opacity-100 transition-all"
+                    title="Rename"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteDocument(doc.id)
+                    }}
                     className="p-1 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
                   >
                     <Trash2 size={12} />
@@ -461,6 +639,29 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
           {task.completed_at && ` · Completed ${new Date(task.completed_at).toLocaleDateString()}`}
         </p>
       </div>
+
+      {/* Image Preview Modal */}
+      {preview.isOpen && preview.dataUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-8"
+          onClick={closePreview}
+        >
+          <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={closePreview}
+              className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={preview.dataUrl}
+              alt={preview.fileName}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+            />
+            <p className="text-center text-white/60 text-sm mt-4">{preview.fileName}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

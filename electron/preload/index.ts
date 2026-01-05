@@ -147,6 +147,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('documents:upload', taskId, projectId),
     uploadFile: (filePath: string, taskId: string | null, projectId: string | null): Promise<UploadResult> =>
       ipcRenderer.invoke('documents:uploadFile', filePath, taskId, projectId),
+    uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null): Promise<UploadResult> =>
+      ipcRenderer.invoke('documents:uploadFromClipboard', base64Data, mimeType, taskId, projectId),
+    getFilePath: (documentId: string): Promise<string | null> =>
+      ipcRenderer.invoke('documents:getFilePath', documentId),
+    getDataUrl: (documentId: string): Promise<string | null> =>
+      ipcRenderer.invoke('documents:getDataUrl', documentId),
+    rename: (documentId: string, newName: string): Promise<void> =>
+      ipcRenderer.invoke('documents:rename', documentId, newName),
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('documents:delete', id),
     search: (query: string, projectId?: string, taskId?: string): Promise<DocumentSearchResult[]> =>
@@ -213,6 +221,10 @@ declare global {
         getByProject: (projectId: string) => Promise<Document[]>
         upload: (taskId: string | null, projectId: string | null) => Promise<UploadResult | null>
         uploadFile: (filePath: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
+        uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
+        getFilePath: (documentId: string) => Promise<string | null>
+        getDataUrl: (documentId: string) => Promise<string | null>
+        rename: (documentId: string, newName: string) => Promise<void>
         delete: (id: string) => Promise<void>
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
