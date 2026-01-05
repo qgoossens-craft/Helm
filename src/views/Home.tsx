@@ -1,19 +1,24 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderKanban, ArrowRight } from 'lucide-react'
-import { useProjectsStore, useTasksStore, useSettingsStore, useUIStore } from '../store'
+import { FolderKanban, ArrowRight, Inbox, AlertCircle, Bell, Check, ListTodo } from 'lucide-react'
+import { useProjectsStore, useTasksStore, useSettingsStore, useUIStore, useQuickTodosStore } from '../store'
+import type { QuickTodo } from '../types/global'
 
 export function Home() {
   const { projects, fetchProjects, isLoading: projectsLoading } = useProjectsStore()
   const { inboxTasks, fetchInbox } = useTasksStore()
   const { settings, fetchSettings } = useSettingsStore()
   const { openKickoffWizard } = useUIStore()
+  const { todos, overdueTodos, dueTodayTodos, fetchAll, fetchOverdue, fetchDueToday, toggleComplete } = useQuickTodosStore()
 
   useEffect(() => {
     fetchProjects()
     fetchInbox()
     fetchSettings()
-  }, [fetchProjects, fetchInbox, fetchSettings])
+    fetchAll()
+    fetchOverdue()
+    fetchDueToday()
+  }, [fetchProjects, fetchInbox, fetchSettings, fetchAll, fetchOverdue, fetchDueToday])
 
   // Get current time for greeting
   const hour = new Date().getHours()
@@ -22,6 +27,10 @@ export function Home() {
 
   // Get active projects
   const activeProjects = projects.filter((p) => p.status === 'active' && !p.archived_at)
+
+  // Get recent incomplete todos from each list (max 3 each)
+  const personalTodos = todos.filter((t) => t.list === 'personal' && !t.completed).slice(0, 3)
+  const workTodos = todos.filter((t) => t.list === 'work' && !t.completed).slice(0, 3)
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -63,7 +72,7 @@ export function Home() {
       <div className="mt-6 p-4 rounded-xl bg-helm-surface border border-helm-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-xl">📥</span>
+            <Inbox size={20} className="text-helm-text-muted" />
             <span className="text-helm-text">
               Inbox: {inboxTasks.length} item{inboxTasks.length !== 1 ? 's' : ''} waiting to be sorted
             </span>
@@ -73,6 +82,95 @@ export function Home() {
           </Link>
         </div>
       </div>
+
+      {/* Overdue todos */}
+      {overdueTodos.length > 0 && (
+        <div className="mt-6 p-4 rounded-xl bg-helm-surface border border-helm-error/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} className="text-helm-error" />
+              <span className="text-sm font-medium text-helm-error">Overdue</span>
+            </div>
+            <Link to="/todos" className="text-xs text-helm-text-muted hover:text-helm-text">
+              View all
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {overdueTodos.map((todo) => (
+              <QuickTodoItem key={todo.id} todo={todo} onToggle={() => toggleComplete(todo.id)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Due today todos */}
+      {dueTodayTodos.length > 0 && (
+        <div className="mt-6 p-4 rounded-xl bg-helm-surface border border-helm-primary/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Bell size={16} className="text-helm-primary" />
+              <span className="text-sm font-medium text-helm-text">Due Today</span>
+            </div>
+            <Link to="/todos" className="text-xs text-helm-text-muted hover:text-helm-text">
+              View all
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {dueTodayTodos.map((todo) => (
+              <QuickTodoItem key={todo.id} todo={todo} onToggle={() => toggleComplete(todo.id)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Todos preview */}
+      {(personalTodos.length > 0 || workTodos.length > 0) && (
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          {/* Personal list */}
+          <div className="p-4 rounded-xl bg-helm-surface border border-helm-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ListTodo size={16} className="text-helm-primary" />
+                <span className="text-sm font-medium text-helm-primary">Personal</span>
+              </div>
+              <Link to="/todos" className="text-xs text-helm-text-muted hover:text-helm-text">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {personalTodos.length > 0 ? (
+                personalTodos.map((todo) => (
+                  <QuickTodoItem key={todo.id} todo={todo} onToggle={() => toggleComplete(todo.id)} showList={false} />
+                ))
+              ) : (
+                <p className="text-xs text-helm-text-muted">No personal todos</p>
+              )}
+            </div>
+          </div>
+
+          {/* Work list */}
+          <div className="p-4 rounded-xl bg-helm-surface border border-helm-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ListTodo size={16} className="text-helm-primary" />
+                <span className="text-sm font-medium text-helm-primary">Work</span>
+              </div>
+              <Link to="/todos" className="text-xs text-helm-text-muted hover:text-helm-text">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {workTodos.length > 0 ? (
+                workTodos.map((todo) => (
+                  <QuickTodoItem key={todo.id} todo={todo} onToggle={() => toggleComplete(todo.id)} showList={false} />
+                ))
+              ) : (
+                <p className="text-xs text-helm-text-muted">No work todos</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Focus mode CTA */}
       <div className="mt-8 flex justify-center">
@@ -139,5 +237,28 @@ function ProjectCard({ project }: ProjectCardProps) {
         />
       </div>
     </Link>
+  )
+}
+
+interface QuickTodoItemProps {
+  todo: QuickTodo
+  onToggle: () => void
+  showList?: boolean
+}
+
+function QuickTodoItem({ todo, onToggle, showList = true }: QuickTodoItemProps) {
+  return (
+    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-helm-bg transition-colors group">
+      <button
+        onClick={onToggle}
+        className="w-4 h-4 rounded border border-helm-border hover:border-helm-primary flex items-center justify-center transition-colors"
+      >
+        {todo.completed && <Check size={10} className="text-helm-success" />}
+      </button>
+      <span className={`flex-1 text-sm ${todo.completed ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>
+        {todo.title}
+      </span>
+      {showList && <span className="text-xs text-helm-text-muted capitalize">{todo.list}</span>}
+    </div>
   )
 }

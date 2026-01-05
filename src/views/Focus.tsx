@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, SkipForward, Sparkles, Loader2 } from 'lucide-react'
+import { Check, SkipForward, Sparkles, Loader2, PartyPopper } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import type { Task, Project } from '../types/global'
 
@@ -146,7 +146,7 @@ export function Focus() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="text-6xl mb-6">🎉</div>
+          <PartyPopper size={64} className="text-helm-primary mb-6 mx-auto" />
           <h1 className="text-2xl font-semibold text-helm-text mb-2">
             You're all caught up!
           </h1>

@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus } from 'lucide-react'
+import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo } from 'lucide-react'
 import { useEffect } from 'react'
 import { useProjectsStore, useUIStore } from '../store'
 
@@ -53,6 +53,7 @@ export function Layout() {
           <NavItem to="/" icon={<Home size={18} />} label="Home" end />
           <NavItem to="/inbox" icon={<Inbox size={18} />} label="Inbox" />
           <NavItem to="/focus" icon={<Focus size={18} />} label="Focus" />
+          <NavItem to="/todos" icon={<ListTodo size={18} />} label="Todos" />
 
           <div className="pt-4 pb-2 px-3 flex items-center justify-between">
             <span className="text-xs font-medium text-helm-text-muted uppercase tracking-wider">

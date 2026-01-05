@@ -83,6 +83,17 @@ export interface ChatResponse {
   conversationId: string
 }
 
+export interface QuickTodo {
+  id: string
+  title: string
+  list: 'personal' | 'work'
+  due_date: string | null
+  completed: boolean
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 declare global {
   interface Window {
     api: {
@@ -128,6 +139,15 @@ declare global {
         chat: (message: string, projectId?: string, taskId?: string) => Promise<ChatResponse>
         parseProjectBrainDump: (brainDump: string) => Promise<ParsedProject>
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
+      }
+      quickTodos: {
+        getAll: (list?: 'personal' | 'work') => Promise<QuickTodo[]>
+        getById: (id: string) => Promise<QuickTodo | null>
+        getDueToday: () => Promise<QuickTodo[]>
+        getOverdue: () => Promise<QuickTodo[]>
+        create: (todo: { title: string; list: 'personal' | 'work'; due_date?: string | null }) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work'; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        delete: (id: string) => Promise<void>
       }
       onShortcut: (channel: string, callback: () => void) => () => void
     }

@@ -328,7 +328,7 @@ export function Project() {
               project.status === 'completed' ? 'bg-helm-primary/20 text-helm-primary' :
               'bg-helm-surface-elevated text-helm-text-muted'
             }`}>
-              {project.status}
+              {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
             </span>
           </div>
 

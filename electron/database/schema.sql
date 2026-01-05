@@ -109,6 +109,19 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 
 -- Note: document_embeddings virtual table is created in db.ts after loading sqlite-vec extension
 
+-- Quick todos (standalone, project-independent)
+CREATE TABLE IF NOT EXISTS quick_todos (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    list TEXT NOT NULL DEFAULT 'personal'
+        CHECK (list IN ('personal', 'work')),
+    due_date TEXT,
+    completed INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
@@ -121,3 +134,6 @@ CREATE INDEX IF NOT EXISTS idx_documents_task ON documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_quick_todos_list ON quick_todos(list);
+CREATE INDEX IF NOT EXISTS idx_quick_todos_due_date ON quick_todos(due_date);
+CREATE INDEX IF NOT EXISTS idx_quick_todos_completed ON quick_todos(completed, completed_at);

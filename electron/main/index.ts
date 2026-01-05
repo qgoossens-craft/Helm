@@ -136,6 +136,15 @@ function registerIpcHandlers(): void {
     return documents.renameDocument(documentId, newName)
   })
 
+  // Quick Todos
+  ipcMain.handle('db:quickTodos:getAll', (_, list?: 'personal' | 'work') => db.quickTodos.getAll(list))
+  ipcMain.handle('db:quickTodos:getById', (_, id: string) => db.quickTodos.getById(id))
+  ipcMain.handle('db:quickTodos:getDueToday', () => db.quickTodos.getDueToday())
+  ipcMain.handle('db:quickTodos:getOverdue', () => db.quickTodos.getOverdue())
+  ipcMain.handle('db:quickTodos:create', (_, todo) => db.quickTodos.create(todo))
+  ipcMain.handle('db:quickTodos:update', (_, id: string, updates) => db.quickTodos.update(id, updates))
+  ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
+
   // AI Operations
   ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string) => {
     return ai.chat(message, projectId, taskId)

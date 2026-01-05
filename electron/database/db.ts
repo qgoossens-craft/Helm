@@ -211,6 +211,17 @@ interface SearchResult {
   distance: number
 }
 
+interface QuickTodo {
+  id: string
+  title: string
+  list: 'personal' | 'work'
+  due_date: string | null
+  completed: boolean
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Database operations
 export const db = {
   // Projects
@@ -671,6 +682,128 @@ export const db = {
 
       const stmt = getDb().prepare(query)
       return stmt.all(...params) as SearchResult[]
+    }
+  },
+
+  // Quick Todos
+  quickTodos: {
+    getAll(list?: 'personal' | 'work'): QuickTodo[] {
+      // Filter out completed items older than 24 hours
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+      if (list) {
+        const stmt = getDb().prepare(`
+          SELECT * FROM quick_todos
+          WHERE list = ?
+            AND (completed = 0 OR completed_at > ?)
+          ORDER BY completed ASC, created_at DESC
+        `)
+        return stmt.all(list, cutoff).map(this._mapRow) as QuickTodo[]
+      }
+
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE completed = 0 OR completed_at > ?
+        ORDER BY completed ASC, created_at DESC
+      `)
+      return stmt.all(cutoff).map(this._mapRow) as QuickTodo[]
+    },
+
+    getById(id: string): QuickTodo | null {
+      const stmt = getDb().prepare('SELECT * FROM quick_todos WHERE id = ?')
+      const row = stmt.get(id)
+      return row ? this._mapRow(row) : null
+    },
+
+    getDueToday(): QuickTodo[] {
+      const today = new Date().toISOString().split('T')[0]
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE due_date = ? AND completed = 0
+        ORDER BY created_at ASC
+      `)
+      return stmt.all(today).map(this._mapRow) as QuickTodo[]
+    },
+
+    getOverdue(): QuickTodo[] {
+      const today = new Date().toISOString().split('T')[0]
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE due_date < ? AND completed = 0
+        ORDER BY due_date ASC
+      `)
+      return stmt.all(today).map(this._mapRow) as QuickTodo[]
+    },
+
+    create(todo: { title: string; list: 'personal' | 'work'; due_date?: string | null }): QuickTodo {
+      const id = generateId()
+      const timestamp = now()
+
+      const stmt = getDb().prepare(`
+        INSERT INTO quick_todos (id, title, list, due_date, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, ?, ?)
+      `)
+
+      stmt.run(id, todo.title, todo.list, todo.due_date || null, timestamp, timestamp)
+
+      return this.getById(id)!
+    },
+
+    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work'; due_date: string | null; completed: boolean }>): QuickTodo {
+      const current = this.getById(id)
+      if (!current) throw new Error(`QuickTodo ${id} not found`)
+
+      const fields: string[] = []
+      const values: (string | number | null)[] = []
+
+      if (updates.title !== undefined) {
+        fields.push('title = ?')
+        values.push(updates.title)
+      }
+      if (updates.list !== undefined) {
+        fields.push('list = ?')
+        values.push(updates.list)
+      }
+      if (updates.due_date !== undefined) {
+        fields.push('due_date = ?')
+        values.push(updates.due_date)
+      }
+      if (updates.completed !== undefined) {
+        fields.push('completed = ?')
+        values.push(updates.completed ? 1 : 0)
+
+        // Set completed_at when marking complete
+        if (updates.completed && !current.completed) {
+          fields.push('completed_at = ?')
+          values.push(now())
+        } else if (!updates.completed && current.completed) {
+          fields.push('completed_at = ?')
+          values.push(null)
+        }
+      }
+
+      fields.push('updated_at = ?')
+      values.push(now())
+      values.push(id)
+
+      const stmt = getDb().prepare(`UPDATE quick_todos SET ${fields.join(', ')} WHERE id = ?`)
+      stmt.run(...values)
+
+      return this.getById(id)!
+    },
+
+    delete(id: string): void {
+      const stmt = getDb().prepare('DELETE FROM quick_todos WHERE id = ?')
+      stmt.run(id)
+    },
+
+    // Helper to convert SQLite row to QuickTodo (boolean conversion)
+    _mapRow(row: unknown): QuickTodo {
+      const r = row as Record<string, unknown>
+      return {
+        ...r,
+        completed: r.completed === 1
+      } as QuickTodo
     }
   }
 }
