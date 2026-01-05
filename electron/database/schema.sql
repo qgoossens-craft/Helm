@@ -87,10 +87,27 @@ CREATE TABLE IF NOT EXISTS documents (
     file_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_size INTEGER NOT NULL,
+    processing_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed')),
+    processing_error TEXT,
+    extracted_text TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
+
+-- Document chunks for RAG
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    token_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+-- Note: document_embeddings virtual table is created in db.ts after loading sqlite-vec extension
 
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
@@ -102,3 +119,5 @@ CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
 CREATE INDEX IF NOT EXISTS idx_projects_context ON projects(context);
 CREATE INDEX IF NOT EXISTS idx_documents_task ON documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status);
+CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);

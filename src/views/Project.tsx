@@ -1,9 +1,9 @@
 import { useParams, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2 } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
-import type { Task } from '../types/global'
+import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
 
@@ -13,6 +13,9 @@ export function Project() {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [showDocuments, setShowDocuments] = useState(true)
 
   const { projects, fetchProjects } = useProjectsStore()
   const { tasks, fetchTasksByProject, createTask, updateTask, deleteTask } = useTasksStore()
@@ -27,6 +30,20 @@ export function Project() {
       fetchTasksByProject(id)
     }
   }, [id, fetchTasksByProject])
+
+  useEffect(() => {
+    async function fetchDocuments() {
+      if (!id) return
+      try {
+        const docs = await window.api.documents.getByProject(id)
+        // Filter to only show project-level documents (not task-bound)
+        setDocuments(docs.filter(d => d.task_id === null))
+      } catch (err) {
+        console.error('Failed to fetch documents:', err)
+      }
+    }
+    fetchDocuments()
+  }, [id])
 
   const project = projects.find((p) => p.id === id)
   const projectTasks = tasks.filter((t) => t.project_id === id && !t.parent_task_id)
@@ -79,6 +96,72 @@ export function Project() {
     } catch (err) {
       addToast('error', (err as Error).message)
     }
+  }
+
+  const handleUploadDocument = async () => {
+    if (!id) return
+    setIsUploading(true)
+    try {
+      const result = await window.api.documents.upload(null, id)
+      if (result === null) return // User cancelled
+
+      if (result.success) {
+        const docs = await window.api.documents.getByProject(id)
+        setDocuments(docs.filter(d => d.task_id === null))
+        addToast('success', 'Document uploaded and processing')
+        pollDocumentStatus(result.documentId)
+      } else {
+        addToast('error', result.error || 'Failed to upload document')
+      }
+    } catch (err) {
+      addToast('error', 'Failed to upload document')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const pollDocumentStatus = async (documentId: string) => {
+    const checkStatus = async () => {
+      try {
+        const doc = await window.api.documents.getById(documentId)
+        if (!doc) return
+
+        setDocuments((prev) => prev.map((d) => (d.id === documentId ? doc : d)))
+
+        if (doc.processing_status === 'processing' || doc.processing_status === 'pending') {
+          setTimeout(checkStatus, 1000)
+        } else if (doc.processing_status === 'completed') {
+          addToast('success', `"${doc.name}" ready for AI assistance`)
+        } else if (doc.processing_status === 'failed') {
+          addToast('error', `Failed to process "${doc.name}"`)
+        }
+      } catch (err) {
+        console.error('Failed to check document status:', err)
+      }
+    }
+    setTimeout(checkStatus, 500)
+  }
+
+  const handleDeleteDocument = async (docId: string) => {
+    try {
+      await window.api.documents.delete(docId)
+      setDocuments((prev) => prev.filter((d) => d.id !== docId))
+      addToast('success', 'Document removed')
+    } catch (err) {
+      addToast('error', 'Failed to delete document')
+    }
+  }
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) return <Image size={14} />
+    if (fileType.includes('pdf') || fileType.includes('document')) return <FileText size={14} />
+    return <File size={14} />
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   if (!project) {
@@ -188,7 +271,7 @@ export function Project() {
         />
       )}
 
-      {/* Right panel - Project info & Copilot (hidden when task selected) */}
+      {/* Right panel - Project info & Jeeves (hidden when task selected) */}
       {!selectedTask && (
       <aside className="w-80 flex-shrink-0 border-l border-helm-border pl-6">
         <div className="space-y-6">
@@ -247,10 +330,91 @@ export function Project() {
             </div>
           </div>
 
-          {/* Copilot */}
+          {/* Documents */}
+          <div>
+            <button
+              onClick={() => setShowDocuments(!showDocuments)}
+              className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
+            >
+              {showDocuments ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Documents
+              {documents.length > 0 && (
+                <span className="text-helm-text-muted">({documents.length})</span>
+              )}
+            </button>
+
+            {showDocuments && (
+              <div className="space-y-2">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className={`flex items-center gap-2 p-2 bg-helm-bg border rounded-lg group ${
+                      doc.processing_status === 'failed'
+                        ? 'border-helm-error/50'
+                        : doc.processing_status === 'processing' || doc.processing_status === 'pending'
+                        ? 'border-helm-primary/50'
+                        : 'border-helm-border'
+                    }`}
+                  >
+                    <span className="text-helm-text-muted flex-shrink-0">{getFileIcon(doc.file_type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-helm-text truncate">{doc.name}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-helm-text-muted">{formatFileSize(doc.file_size)}</span>
+                        {doc.processing_status === 'pending' && (
+                          <span className="flex items-center gap-1 text-xs text-helm-text-muted">
+                            <Loader2 size={10} className="animate-spin" />
+                          </span>
+                        )}
+                        {doc.processing_status === 'processing' && (
+                          <span className="flex items-center gap-1 text-xs text-helm-primary">
+                            <Loader2 size={10} className="animate-spin" />
+                          </span>
+                        )}
+                        {doc.processing_status === 'completed' && (
+                          <CheckCircle2 size={10} className="text-helm-success" />
+                        )}
+                        {doc.processing_status === 'failed' && (
+                          <span title={doc.processing_error || undefined}>
+                            <AlertCircle size={10} className="text-helm-error" />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteDocument(doc.id)}
+                      className="p-1 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  onClick={handleUploadDocument}
+                  disabled={isUploading}
+                  className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs text-helm-text-muted hover:text-helm-text bg-helm-bg hover:bg-helm-surface-elevated border border-dashed border-helm-border rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={12} />
+                      Add project document
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Jeeves */}
           <div className="p-4 bg-helm-surface rounded-lg border border-helm-border">
             <h3 className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-3">
-              Copilot
+              Jeeves
             </h3>
             <p className="text-sm text-helm-text-muted mb-4">
               Need help breaking down tasks or figuring out next steps?

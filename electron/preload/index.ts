@@ -61,7 +61,22 @@ export interface Document {
   file_path: string
   file_type: string
   file_size: number
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed'
+  processing_error: string | null
+  extracted_text: string | null
   created_at: string
+}
+
+export interface UploadResult {
+  success: boolean
+  documentId: string
+  error?: string
+}
+
+export interface DocumentSearchResult {
+  documentName: string
+  content: string
+  relevance: number
 }
 
 export interface ChatResponse {
@@ -122,14 +137,20 @@ contextBridge.exposeInMainWorld('api', {
 
   // Documents
   documents: {
-    create: (doc: Omit<Document, 'id' | 'created_at'>): Promise<Document> =>
-      ipcRenderer.invoke('db:documents:create', doc),
+    getById: (id: string): Promise<Document | null> =>
+      ipcRenderer.invoke('db:documents:getById', id),
     getByTask: (taskId: string): Promise<Document[]> =>
       ipcRenderer.invoke('db:documents:getByTask', taskId),
     getByProject: (projectId: string): Promise<Document[]> =>
       ipcRenderer.invoke('db:documents:getByProject', projectId),
+    upload: (taskId: string | null, projectId: string | null): Promise<UploadResult | null> =>
+      ipcRenderer.invoke('documents:upload', taskId, projectId),
+    uploadFile: (filePath: string, taskId: string | null, projectId: string | null): Promise<UploadResult> =>
+      ipcRenderer.invoke('documents:uploadFile', filePath, taskId, projectId),
     delete: (id: string): Promise<void> =>
-      ipcRenderer.invoke('db:documents:delete', id)
+      ipcRenderer.invoke('documents:delete', id),
+    search: (query: string, projectId?: string, taskId?: string): Promise<DocumentSearchResult[]> =>
+      ipcRenderer.invoke('documents:search', query, projectId, taskId)
   },
 
   // AI Operations
@@ -187,10 +208,13 @@ declare global {
         getByProject: (projectId: string) => Promise<AIConversation[]>
       }
       documents: {
-        create: (doc: Omit<Document, 'id' | 'created_at'>) => Promise<Document>
+        getById: (id: string) => Promise<Document | null>
         getByTask: (taskId: string) => Promise<Document[]>
         getByProject: (projectId: string) => Promise<Document[]>
+        upload: (taskId: string | null, projectId: string | null) => Promise<UploadResult | null>
+        uploadFile: (filePath: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
         delete: (id: string) => Promise<void>
+        search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
       copilot: {
         chat: (message: string, projectId?: string, taskId?: string) => Promise<ChatResponse>

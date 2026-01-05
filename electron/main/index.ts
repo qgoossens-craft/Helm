@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from 'electron'
 import { join } from 'path'
 import { initDatabase, db } from '../database/db'
 import * as ai from '../services/ai'
+import * as documents from '../services/documents'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -12,7 +13,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 15 },
+    trafficLightPosition: { x: 78, y: 18 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -83,11 +84,40 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:ai:save', (_, conversation) => db.aiConversations.save(conversation))
   ipcMain.handle('db:ai:getByProject', (_, projectId: string) => db.aiConversations.getByProject(projectId))
 
-  // Documents
-  ipcMain.handle('db:documents:create', (_, doc) => db.documents.create(doc))
+  // Documents (database)
+  ipcMain.handle('db:documents:getById', (_, id: string) => db.documents.getById(id))
   ipcMain.handle('db:documents:getByTask', (_, taskId: string) => db.documents.getByTask(taskId))
   ipcMain.handle('db:documents:getByProject', (_, projectId: string) => db.documents.getByProject(projectId))
-  ipcMain.handle('db:documents:delete', (_, id: string) => db.documents.delete(id))
+
+  // Document upload and processing
+  ipcMain.handle('documents:upload', async (_, taskId: string | null, projectId: string | null) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Documents', extensions: ['pdf', 'docx', 'txt', 'md'] },
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }
+      ]
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    const filePath = result.filePaths[0]
+    return documents.processUpload(filePath, taskId, projectId)
+  })
+
+  ipcMain.handle('documents:uploadFile', async (_, filePath: string, taskId: string | null, projectId: string | null) => {
+    return documents.processUpload(filePath, taskId, projectId)
+  })
+
+  ipcMain.handle('documents:delete', async (_, documentId: string) => {
+    documents.deleteDocument(documentId)
+  })
+
+  ipcMain.handle('documents:search', async (_, query: string, projectId?: string, taskId?: string) => {
+    return documents.searchDocuments(query, { projectId, taskId })
+  })
 
   // AI Operations
   ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string) => {

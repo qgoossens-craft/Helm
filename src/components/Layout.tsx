@@ -43,9 +43,9 @@ export function Layout() {
     <div className="flex h-screen bg-helm-bg">
       {/* Sidebar */}
       <aside className="w-60 border-r border-helm-border flex flex-col">
-        {/* Drag region for window */}
-        <div className="h-12 drag-region flex items-center px-4">
-          <span className="text-lg font-semibold text-helm-text no-drag">Helm</span>
+        {/* Drag region for window with logo before traffic lights */}
+        <div className="h-12 drag-region flex items-center">
+          <span className="text-lg font-semibold text-helm-text no-drag pl-4 pr-20">helm</span>
         </div>
 
         {/* Navigation */}
@@ -107,7 +107,7 @@ export function Layout() {
             onClick={() => openCopilot()}
           >
             <Sparkles size={16} />
-            <span>Copilot</span>
+            <span>Jeeves</span>
             <kbd className="text-xs bg-helm-bg px-1.5 py-0.5 rounded">⌘K</kbd>
           </button>
         </div>

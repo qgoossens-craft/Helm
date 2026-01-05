@@ -124,7 +124,7 @@ export function CopilotModal() {
           <div className="flex items-center gap-3">
             <Sparkles size={20} className="text-helm-primary" />
             <div>
-              <h2 className="font-medium text-helm-text">Copilot</h2>
+              <h2 className="font-medium text-helm-text">Jeeves</h2>
               {currentProject && (
                 <p className="text-xs text-helm-text-muted">
                   Context: {currentProject.name}

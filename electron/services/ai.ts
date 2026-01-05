@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { db } from '../database/db'
+import { searchDocuments } from './documents'
 
 // AI Context for injecting into prompts
 interface AIContext {
@@ -27,6 +28,11 @@ interface AIContext {
     action: string
     details: string
     time: string
+  }>
+  relevantDocuments?: Array<{
+    documentName: string
+    content: string
+    relevance: number
   }>
 }
 
@@ -110,13 +116,25 @@ Current tasks:
 ${context.projectTasks.taskList.map(t => `- [${t.status}] ${t.title}`).join('\n')}`
   }
 
+  if (context.relevantDocuments && context.relevantDocuments.length > 0) {
+    prompt += `
+
+RELEVANT DOCUMENTS:
+The following excerpts from attached documents may help answer the user's question:
+
+${context.relevantDocuments.map((doc, i) => `[${i + 1}] From "${doc.documentName}":
+${doc.content}
+`).join('\n')}`
+  }
+
   prompt += `
 
 Guidelines:
 - Keep responses under 150 words unless asked for detail
 - Suggest ONE clear next action when appropriate
 - If user seems stuck, offer to break things down
-- Don't be preachy about productivity - just help`
+- Don't be preachy about productivity - just help
+- When referencing document content, cite the document name`
 
   return prompt
 }
@@ -134,6 +152,24 @@ export async function chat(
 
   const openai = new OpenAI({ apiKey })
   const context = buildContext(projectId)
+
+  // Search for relevant documents using RAG
+  try {
+    const relevantDocs = await searchDocuments(message, {
+      projectId,
+      taskId,
+      limit: 3
+    })
+
+    if (relevantDocs.length > 0) {
+      // Only include documents with decent relevance (similarity > 0.3)
+      context.relevantDocuments = relevantDocs.filter(doc => doc.relevance > 0.3)
+    }
+  } catch (err) {
+    // RAG search failed, continue without document context
+    console.error('RAG search failed:', err)
+  }
+
   const systemPrompt = buildSystemPrompt(context)
 
   try {

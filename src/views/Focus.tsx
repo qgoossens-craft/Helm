@@ -220,13 +220,13 @@ export function Focus() {
           </button>
         </div>
 
-        {/* Copilot help */}
+        {/* Jeeves help */}
         <div className="mt-12">
           <button
             onClick={() => openCopilot({ projectId: currentProject.id, taskId: currentTask.id })}
             className="text-sm text-helm-text-muted hover:text-helm-primary transition-colors"
           >
-            Feeling stuck? Ask Copilot for help
+            Feeling stuck? Ask Jeeves for help
           </button>
         </div>
       </div>

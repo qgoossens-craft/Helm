@@ -1,10 +1,11 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { randomUUID } from 'crypto'
+import * as sqliteVec from 'sqlite-vec'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -17,10 +18,65 @@ function getDbPath(): string {
   return join(userDataPath, 'helm.db')
 }
 
+// Get documents storage path
+export function getDocumentsPath(): string {
+  const userDataPath = app.getPath('userData')
+  const documentsPath = join(userDataPath, 'documents')
+  if (!existsSync(documentsPath)) {
+    mkdirSync(documentsPath, { recursive: true })
+  }
+  return documentsPath
+}
+
+// Run migrations to update existing database schema
+function runMigrations(db: Database.Database): void {
+  // Check if documents table exists and needs migration
+  const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
+  const columnNames = tableInfo.map(col => col.name)
+
+  // Add processing_status column if missing
+  if (!columnNames.includes('processing_status')) {
+    db.exec(`ALTER TABLE documents ADD COLUMN processing_status TEXT NOT NULL DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed'))`)
+    console.log('Migration: Added processing_status column to documents')
+  }
+
+  // Add processing_error column if missing
+  if (!columnNames.includes('processing_error')) {
+    db.exec(`ALTER TABLE documents ADD COLUMN processing_error TEXT`)
+    console.log('Migration: Added processing_error column to documents')
+  }
+
+  // Add extracted_text column if missing
+  if (!columnNames.includes('extracted_text')) {
+    db.exec(`ALTER TABLE documents ADD COLUMN extracted_text TEXT`)
+    console.log('Migration: Added extracted_text column to documents')
+  }
+
+  // Create document_chunks table if not exists
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS document_chunks (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      token_count INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    )
+  `)
+
+  // Create indexes if not exists
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id)`)
+}
+
 // Initialize database
 export function initDatabase(): void {
   const dbPath = getDbPath()
   database = new Database(dbPath)
+
+  // Load sqlite-vec extension for vector operations
+  sqliteVec.load(database)
 
   // Enable foreign keys
   database.pragma('foreign_keys = ON')
@@ -33,9 +89,26 @@ export function initDatabase(): void {
   try {
     database.exec(schema)
   } catch (error) {
-    // Only log if it's not about existing tables
-    if (!String(error).includes('already exists')) {
+    // Only log if it's not about existing tables or columns
+    if (!String(error).includes('already exists') && !String(error).includes('duplicate column')) {
       console.error('Schema initialization error:', error)
+    }
+  }
+
+  // Run migrations for existing databases
+  runMigrations(database)
+
+  // Create embeddings virtual table (requires sqlite-vec extension)
+  try {
+    database.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS document_embeddings USING vec0(
+        chunk_id TEXT PRIMARY KEY,
+        embedding FLOAT[1536]
+      )
+    `)
+  } catch (error) {
+    if (!String(error).includes('already exists')) {
+      console.error('Failed to create embeddings table:', error)
     }
   }
 
@@ -113,7 +186,29 @@ interface Document {
   file_path: string
   file_type: string
   file_size: number
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed'
+  processing_error: string | null
+  extracted_text: string | null
   created_at: string
+}
+
+interface DocumentChunk {
+  id: string
+  document_id: string
+  chunk_index: number
+  content: string
+  token_count: number
+  created_at: string
+}
+
+interface SearchResult {
+  chunk_id: string
+  document_id: string
+  document_name: string
+  project_id: string | null
+  task_id: string | null
+  content: string
+  distance: number
 }
 
 // Database operations
@@ -446,17 +541,18 @@ export const db = {
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO documents (id, project_id, task_id, name, file_path, file_type, file_size, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO documents (id, project_id, task_id, name, file_path, file_type, file_size, processing_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
       `)
 
       stmt.run(id, doc.project_id, doc.task_id, doc.name, doc.file_path, doc.file_type, doc.file_size, timestamp)
 
-      return {
-        id,
-        ...doc,
-        created_at: timestamp
-      }
+      return this.getById(id)!
+    },
+
+    getById(id: string): Document | null {
+      const stmt = getDb().prepare('SELECT * FROM documents WHERE id = ?')
+      return (stmt.get(id) as Document) || null
     },
 
     getByTask(taskId: string): Document[] {
@@ -477,9 +573,99 @@ export const db = {
       return stmt.all(projectId) as Document[]
     },
 
+    updateStatus(id: string, status: Document['processing_status'], error?: string, extractedText?: string): void {
+      const stmt = getDb().prepare(`
+        UPDATE documents
+        SET processing_status = ?, processing_error = ?, extracted_text = ?
+        WHERE id = ?
+      `)
+      stmt.run(status, error || null, extractedText || null, id)
+    },
+
     delete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM documents WHERE id = ?')
       stmt.run(id)
+    }
+  },
+
+  // Document Chunks
+  chunks: {
+    create(chunk: Omit<DocumentChunk, 'id' | 'created_at'>): DocumentChunk {
+      const id = generateId()
+      const timestamp = now()
+
+      const stmt = getDb().prepare(`
+        INSERT INTO document_chunks (id, document_id, chunk_index, content, token_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+
+      stmt.run(id, chunk.document_id, chunk.chunk_index, chunk.content, chunk.token_count, timestamp)
+
+      return { id, ...chunk, created_at: timestamp }
+    },
+
+    getByDocument(documentId: string): DocumentChunk[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM document_chunks
+        WHERE document_id = ?
+        ORDER BY chunk_index ASC
+      `)
+      return stmt.all(documentId) as DocumentChunk[]
+    },
+
+    deleteByDocument(documentId: string): void {
+      const stmt = getDb().prepare('DELETE FROM document_chunks WHERE document_id = ?')
+      stmt.run(documentId)
+    }
+  },
+
+  // Document Embeddings
+  embeddings: {
+    store(chunkId: string, embedding: Float32Array): void {
+      const stmt = getDb().prepare(`
+        INSERT INTO document_embeddings (chunk_id, embedding)
+        VALUES (?, ?)
+      `)
+      stmt.run(chunkId, embedding)
+    },
+
+    deleteByChunk(chunkId: string): void {
+      const stmt = getDb().prepare('DELETE FROM document_embeddings WHERE chunk_id = ?')
+      stmt.run(chunkId)
+    },
+
+    searchSimilar(queryEmbedding: Float32Array, limit: number = 5, projectId?: string, taskId?: string): SearchResult[] {
+      let query = `
+        SELECT
+          dc.id as chunk_id,
+          dc.document_id,
+          d.name as document_name,
+          d.project_id,
+          d.task_id,
+          dc.content,
+          vec_distance_L2(de.embedding, ?) as distance
+        FROM document_embeddings de
+        JOIN document_chunks dc ON dc.id = de.chunk_id
+        JOIN documents d ON d.id = dc.document_id
+        WHERE d.processing_status = 'completed'
+      `
+
+      const params: (Float32Array | string | number)[] = [queryEmbedding]
+
+      if (projectId) {
+        query += ' AND d.project_id = ?'
+        params.push(projectId)
+      }
+      if (taskId) {
+        query += ' AND d.task_id = ?'
+        params.push(taskId)
+      }
+
+      query += ' ORDER BY distance ASC LIMIT ?'
+      params.push(limit)
+
+      const stmt = getDb().prepare(query)
+      return stmt.all(...params) as SearchResult[]
     }
   }
 }

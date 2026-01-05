@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useTasksStore, useUIStore } from '../store'
 import type { Task, Document } from '../types/global'
 
@@ -20,6 +20,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [showDocuments, setShowDocuments] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
   const { addToast } = useUIStore()
@@ -136,6 +137,58 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     } catch (err) {
       addToast('error', 'Failed to delete document')
     }
+  }
+
+  const handleUploadDocument = async () => {
+    setIsUploading(true)
+    try {
+      const result = await window.api.documents.upload(task.id, projectId)
+      if (result === null) {
+        // User cancelled the dialog
+        return
+      }
+      if (result.success) {
+        // Fetch updated document list
+        const docs = await window.api.documents.getByTask(task.id)
+        setDocuments(docs)
+        addToast('success', 'Document uploaded and processing')
+
+        // Poll for processing completion
+        pollDocumentStatus(result.documentId)
+      } else {
+        addToast('error', result.error || 'Failed to upload document')
+      }
+    } catch (err) {
+      addToast('error', 'Failed to upload document')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const pollDocumentStatus = async (documentId: string) => {
+    const checkStatus = async () => {
+      try {
+        const doc = await window.api.documents.getById(documentId)
+        if (!doc) return
+
+        // Update the document in state
+        setDocuments((prev) => prev.map((d) => (d.id === documentId ? doc : d)))
+
+        if (doc.processing_status === 'processing' || doc.processing_status === 'pending') {
+          // Continue polling
+          setTimeout(checkStatus, 1000)
+        } else if (doc.processing_status === 'completed') {
+          addToast('success', `"${doc.name}" ready for AI assistance`)
+        } else if (doc.processing_status === 'failed') {
+          addToast('error', `Failed to process "${doc.name}"`)
+        }
+      } catch (err) {
+        console.error('Failed to check document status:', err)
+      }
+    }
+
+    // Start polling after a short delay
+    setTimeout(checkStatus, 500)
   }
 
   const getFileIcon = (fileType: string) => {
@@ -325,12 +378,44 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
               {documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex items-center gap-3 p-2 bg-helm-bg border border-helm-border rounded-lg group"
+                  className={`flex items-center gap-3 p-2 bg-helm-bg border rounded-lg group ${
+                    doc.processing_status === 'failed'
+                      ? 'border-helm-error/50'
+                      : doc.processing_status === 'processing' || doc.processing_status === 'pending'
+                      ? 'border-helm-primary/50'
+                      : 'border-helm-border'
+                  }`}
                 >
                   <span className="text-helm-text-muted">{getFileIcon(doc.file_type)}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-helm-text truncate">{doc.name}</p>
-                    <p className="text-xs text-helm-text-muted">{formatFileSize(doc.file_size)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-helm-text-muted">{formatFileSize(doc.file_size)}</p>
+                      {doc.processing_status === 'pending' && (
+                        <span className="flex items-center gap-1 text-xs text-helm-text-muted">
+                          <Loader2 size={10} className="animate-spin" />
+                          Queued
+                        </span>
+                      )}
+                      {doc.processing_status === 'processing' && (
+                        <span className="flex items-center gap-1 text-xs text-helm-primary">
+                          <Loader2 size={10} className="animate-spin" />
+                          Processing
+                        </span>
+                      )}
+                      {doc.processing_status === 'completed' && (
+                        <span className="flex items-center gap-1 text-xs text-helm-success">
+                          <CheckCircle2 size={10} />
+                          Ready
+                        </span>
+                      )}
+                      {doc.processing_status === 'failed' && (
+                        <span className="flex items-center gap-1 text-xs text-helm-error" title={doc.processing_error || undefined}>
+                          <AlertCircle size={10} />
+                          Failed
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => handleDeleteDocument(doc.id)}
@@ -348,11 +433,21 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
               )}
 
               <button
-                onClick={() => addToast('info', 'Document upload coming soon!')}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full"
+                onClick={handleUploadDocument}
+                disabled={isUploading}
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Plus size={14} />
-                Add document
+                {isUploading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} />
+                    Add document
+                  </>
+                )}
               </button>
             </div>
           )}
