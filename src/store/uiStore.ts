@@ -21,6 +21,9 @@ interface UIState {
   isMoveToProjectOpen: boolean
   moveTaskId: string | null
 
+  // Quick Switcher
+  isQuickSwitcherOpen: boolean
+
   // Toasts
   toasts: Toast[]
 
@@ -31,6 +34,8 @@ interface UIState {
   closeKickoffWizard: () => void
   openMoveToProject: (taskId: string) => void
   closeMoveToProject: () => void
+  openQuickSwitcher: () => void
+  closeQuickSwitcher: () => void
   addToast: (type: Toast['type'], message: string) => void
   removeToast: (id: string) => void
 }
@@ -41,6 +46,7 @@ export const useUIStore = create<UIState>((set) => ({
   isKickoffWizardOpen: false,
   isMoveToProjectOpen: false,
   moveTaskId: null,
+  isQuickSwitcherOpen: false,
   toasts: [],
 
   openCopilot: (context) => {
@@ -65,6 +71,14 @@ export const useUIStore = create<UIState>((set) => ({
 
   closeMoveToProject: () => {
     set({ isMoveToProjectOpen: false, moveTaskId: null })
+  },
+
+  openQuickSwitcher: () => {
+    set({ isQuickSwitcherOpen: true })
+  },
+
+  closeQuickSwitcher: () => {
+    set({ isQuickSwitcherOpen: false })
   },
 
   addToast: (type, message) => {

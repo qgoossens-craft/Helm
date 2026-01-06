@@ -202,7 +202,7 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
       return date.toLocaleDateString('en-US', { weekday: 'short' })
     }
 
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
   const isOverdue = todo.due_date && !todo.completed && new Date(todo.due_date) < new Date(new Date().toDateString())

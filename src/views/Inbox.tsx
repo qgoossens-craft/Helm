@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, ArrowRight } from 'lucide-react'
+import { Plus, Trash2, ArrowRight, Check } from 'lucide-react'
 import { useTasksStore, useProjectsStore, useUIStore } from '../store'
 
 export function Inbox() {
   const [newItem, setNewItem] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const { inboxTasks, fetchInbox, createTask, deleteTask } = useTasksStore()
+  const { inboxTasks, fetchInbox, createTask, updateTask, deleteTask } = useTasksStore()
   const { projects, fetchProjects } = useProjectsStore()
   const { openMoveToProject, addToast } = useUIStore()
 
@@ -38,6 +38,20 @@ export function Inbox() {
       addToast('error', (err as Error).message)
     }
   }
+
+  const handleToggleComplete = async (id: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'done' ? 'todo' : 'done'
+      await updateTask(id, { status: newStatus })
+      addToast('success', newStatus === 'done' ? 'Item completed' : 'Item restored')
+    } catch (err) {
+      addToast('error', (err as Error).message)
+    }
+  }
+
+  // Filter into incomplete and completed
+  const incompleteItems = inboxTasks.filter((t) => t.status !== 'done')
+  const completedItems = inboxTasks.filter((t) => t.status === 'done')
 
   const handleDelete = async (id: string) => {
     try {
@@ -92,19 +106,41 @@ export function Inbox() {
 
       {/* Inbox items */}
       <div className="space-y-2">
-        {inboxTasks.length === 0 ? (
+        {incompleteItems.length === 0 && completedItems.length === 0 ? (
           <EmptyState />
         ) : (
-          inboxTasks.map((task) => (
-            <InboxItem
-              key={task.id}
-              id={task.id}
-              title={task.title}
-              createdAt={formatDate(task.created_at)}
-              onMove={() => openMoveToProject(task.id)}
-              onDelete={() => handleDelete(task.id)}
-            />
-          ))
+          <>
+            {incompleteItems.map((task) => (
+              <InboxItem
+                key={task.id}
+                title={task.title}
+                completed={false}
+                createdAt={formatDate(task.created_at)}
+                onToggle={() => handleToggleComplete(task.id, task.status)}
+                onMove={() => openMoveToProject(task.id)}
+                onDelete={() => handleDelete(task.id)}
+              />
+            ))}
+
+            {completedItems.length > 0 && (
+              <>
+                <p className="text-xs font-medium text-helm-text-muted uppercase tracking-wider pt-4 pb-2">
+                  Completed
+                </p>
+                {completedItems.map((task) => (
+                  <InboxItem
+                    key={task.id}
+                    title={task.title}
+                    completed={true}
+                    createdAt={formatDate(task.created_at)}
+                    onToggle={() => handleToggleComplete(task.id, task.status)}
+                    onMove={() => openMoveToProject(task.id)}
+                    onDelete={() => handleDelete(task.id)}
+                  />
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -125,29 +161,48 @@ function EmptyState() {
 }
 
 interface InboxItemProps {
-  id: string
   title: string
+  completed: boolean
   createdAt: string
+  onToggle: () => void
   onMove: () => void
   onDelete: () => void
 }
 
-function InboxItem({ id, title, createdAt, onMove, onDelete }: InboxItemProps) {
+function InboxItem({ title, completed, createdAt, onToggle, onMove, onDelete }: InboxItemProps) {
   return (
-    <div className="flex items-center gap-3 p-4 bg-helm-surface border border-helm-border rounded-lg group animate-slide-up">
-      <div className="w-5 h-5 rounded border border-helm-border" />
+    <div
+      className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up ${
+        completed
+          ? 'border-helm-border/50 opacity-60'
+          : 'border-helm-border'
+      }`}
+    >
+      <button
+        onClick={onToggle}
+        className={`w-5 h-5 rounded border shrink-0 flex items-center justify-center transition-colors ${
+          completed
+            ? 'bg-helm-success border-helm-success text-white'
+            : 'border-helm-border hover:border-helm-primary'
+        }`}
+        title={completed ? 'Mark as incomplete' : 'Mark as complete'}
+      >
+        {completed && <Check size={14} />}
+      </button>
       <div className="flex-1 min-w-0">
-        <p className="text-helm-text truncate">{title}</p>
+        <p className={`truncate ${completed ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{title}</p>
         <p className="text-xs text-helm-text-muted">{createdAt}</p>
       </div>
       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onMove}
-          className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
-          title="Move to project"
-        >
-          <ArrowRight size={16} />
-        </button>
+        {!completed && (
+          <button
+            onClick={onMove}
+            className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
+            title="Move to project"
+          >
+            <ArrowRight size={16} />
+          </button>
+        )}
         <button
           onClick={onDelete}
           className="p-2 text-helm-text-muted hover:text-helm-error hover:bg-helm-surface-elevated rounded transition-colors"

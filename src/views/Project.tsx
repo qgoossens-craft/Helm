@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
@@ -11,6 +11,7 @@ type TaskFilter = 'all' | 'active' | 'todo' | 'in_progress' | 'done'
 
 export function Project() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('active')
   const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -20,8 +21,10 @@ export function Project() {
   const [isUploading, setIsUploading] = useState(false)
   const [showDocuments, setShowDocuments] = useState(true)
   const [showAppearance, setShowAppearance] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const { projects, fetchProjects, updateProject } = useProjectsStore()
+  const { projects, fetchProjects, updateProject, deleteProject } = useProjectsStore()
+  const navigate = useNavigate()
   const { tasks, fetchTasksByProject, createTask, updateTask, deleteTask } = useTasksStore()
   const { addToast } = useUIStore()
 
@@ -34,6 +37,19 @@ export function Project() {
       fetchTasksByProject(id)
     }
   }, [id, fetchTasksByProject])
+
+  // Auto-select task from URL query param
+  useEffect(() => {
+    const taskId = searchParams.get('task')
+    if (taskId && tasks.length > 0) {
+      const task = tasks.find(t => t.id === taskId)
+      if (task) {
+        setSelectedTask(task)
+        // Clear the query param after selecting
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, tasks, setSearchParams])
 
   useEffect(() => {
     async function fetchDocuments() {
@@ -169,6 +185,17 @@ export function Project() {
       addToast('success', 'Document removed')
     } catch (err) {
       addToast('error', 'Failed to delete document')
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!id) return
+    try {
+      await deleteProject(id)
+      addToast('success', 'Project deleted')
+      navigate('/')
+    } catch (err) {
+      addToast('error', (err as Error).message)
     }
   }
 
@@ -514,6 +541,39 @@ export function Project() {
             )}
           </div>
 
+          {/* Delete Project */}
+          <div className="pt-4 border-t border-helm-border">
+            {showDeleteConfirm ? (
+              <div className="space-y-3">
+                <p className="text-sm text-helm-text">
+                  Delete <strong>{project.name}</strong>? This will also delete all tasks and documents.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteProject}
+                    className="flex-1 px-3 py-2 bg-helm-error hover:bg-helm-error/90 text-white text-sm rounded-lg transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 px-3 py-2 text-helm-text-muted hover:text-helm-text text-sm transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-2 text-sm text-helm-text-muted hover:text-helm-error transition-colors"
+              >
+                <Trash2 size={14} />
+                Delete project
+              </button>
+            )}
+          </div>
+
         </div>
       </aside>
       )}
@@ -709,7 +769,7 @@ function KanbanCard({ task, onDragStart, onDelete, onSelect }: KanbanCardProps) 
       <p className="text-sm text-helm-text">{task.title}</p>
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs text-helm-text-muted">
-          {new Date(task.created_at).toLocaleDateString()}
+          {new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
         </span>
         <button
           onClick={(e) => {

@@ -47,12 +47,17 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
   const { addToast } = useUIStore()
   const panelRef = useRef<HTMLDivElement>(null)
-  const titleRef = useRef<HTMLInputElement>(null)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     setTitle(task.title)
     setDescription(task.description || '')
     setStatus(task.status)
+    // Auto-resize title textarea after task changes
+    if (titleRef.current) {
+      titleRef.current.style.height = 'auto'
+      titleRef.current.style.height = titleRef.current.scrollHeight + 'px'
+    }
   }, [task])
 
   useEffect(() => {
@@ -374,13 +379,18 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Title */}
         <div>
-          <input
+          <textarea
             ref={titleRef}
-            type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              // Auto-resize
+              e.target.style.height = 'auto'
+              e.target.style.height = e.target.scrollHeight + 'px'
+            }}
             onBlur={handleSave}
-            className="w-full text-lg font-medium text-helm-text bg-transparent border-none outline-none focus:ring-0 placeholder:text-helm-text-muted"
+            rows={1}
+            className="w-full text-lg font-medium text-helm-text bg-transparent border-none outline-none focus:ring-0 placeholder:text-helm-text-muted resize-none overflow-hidden"
             placeholder="Task title..."
           />
         </div>
@@ -635,8 +645,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       {/* Footer */}
       <div className="p-4 border-t border-helm-border">
         <p className="text-xs text-helm-text-muted">
-          Created {new Date(task.created_at).toLocaleDateString()}
-          {task.completed_at && ` · Completed ${new Date(task.completed_at).toLocaleDateString()}`}
+          Created {new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+          {task.completed_at && ` · Completed ${new Date(task.completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}`}
         </p>
       </div>
 

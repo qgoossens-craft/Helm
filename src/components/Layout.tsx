@@ -4,8 +4,9 @@ import {
   Briefcase, Rocket, Target, Star, Heart, Code, Book, Music, Camera,
   Palette, Gamepad2, GraduationCap, Plane, ShoppingBag, type LucideIcon
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useProjectsStore, useUIStore } from '../store'
+import { QuickSwitcher, useDoubleTapCmd } from './QuickSwitcher'
 
 // Project color palette
 export const PROJECT_COLORS: Record<string, string> = {
@@ -43,7 +44,13 @@ export function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { projects, fetchProjects } = useProjectsStore()
-  const { openCopilot, openKickoffWizard } = useUIStore()
+  const { openCopilot, openKickoffWizard, openQuickSwitcher } = useUIStore()
+
+  // Double-tap Cmd to open Quick Switcher
+  const handleDoubleTapCmd = useCallback(() => {
+    openQuickSwitcher()
+  }, [openQuickSwitcher])
+  useDoubleTapCmd(handleDoubleTapCmd)
 
   // Check if we're on a project page (for right panel border)
   const isProjectPage = location.pathname.startsWith('/project/')
@@ -168,6 +175,9 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Quick Switcher modal */}
+      <QuickSwitcher />
     </div>
   )
 }
