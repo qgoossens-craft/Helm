@@ -1,6 +1,8 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
@@ -22,6 +24,12 @@ export function Project() {
   const [showDocuments, setShowDocuments] = useState(true)
   const [showAppearance, setShowAppearance] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [preview, setPreview] = useState<{
+    isOpen: boolean
+    dataUrl: string | null
+    fileName: string
+    fileType: string
+  }>({ isOpen: false, dataUrl: null, fileName: '', fileType: '' })
 
   const { projects, fetchProjects, updateProject, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
@@ -187,6 +195,62 @@ export function Project() {
       addToast('error', 'Failed to delete document')
     }
   }
+
+  const canPreviewDoc = (fileType: string) => {
+    return fileType.startsWith('image/') ||
+           fileType === 'application/pdf' ||
+           fileType.startsWith('text/') ||
+           fileType === 'application/json'
+  }
+
+  const handlePreviewDocument = async (doc: Document) => {
+    if (!canPreviewDoc(doc.file_type)) {
+      handleOpenExternal(doc)
+      return
+    }
+
+    try {
+      const dataUrl = await window.api.documents.getDataUrl(doc.id)
+      if (dataUrl) {
+        setPreview({
+          isOpen: true,
+          dataUrl,
+          fileName: doc.name,
+          fileType: doc.file_type
+        })
+      } else {
+        addToast('error', 'File not found')
+      }
+    } catch (err) {
+      addToast('error', 'Failed to load preview')
+    }
+  }
+
+  const handleOpenExternal = async (doc: Document) => {
+    try {
+      const result = await window.api.documents.openExternal(doc.id)
+      if (result && result !== '') {
+        addToast('error', `Failed to open: ${result}`)
+      }
+    } catch (err) {
+      addToast('error', 'Failed to open document')
+    }
+  }
+
+  const closePreview = () => {
+    setPreview({ isOpen: false, dataUrl: null, fileName: '', fileType: '' })
+  }
+
+  // Handle ESC key to close preview modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && preview.isOpen) {
+        closePreview()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [preview.isOpen])
 
   const handleDeleteProject = async () => {
     if (!id) return
@@ -488,7 +552,19 @@ export function Project() {
                   >
                     <span className="text-helm-text-muted flex-shrink-0">{getFileIcon(doc.file_type)}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-helm-text truncate">{doc.name}</p>
+                      <p
+                        className={`text-xs text-helm-text truncate ${
+                          doc.processing_status === 'completed' ? 'cursor-pointer hover:text-helm-primary' : ''
+                        }`}
+                        onClick={() => {
+                          if (doc.processing_status === 'completed') {
+                            handlePreviewDocument(doc)
+                          }
+                        }}
+                        title={doc.processing_status === 'completed' ? 'Click to open' : doc.name}
+                      >
+                        {doc.name}
+                      </p>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-helm-text-muted">{formatFileSize(doc.file_size)}</span>
                         {doc.processing_status === 'pending' && (
@@ -576,6 +652,62 @@ export function Project() {
 
         </div>
       </aside>
+      )}
+
+      {/* Document Preview Modal */}
+      {preview.isOpen && preview.dataUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-8"
+          onClick={closePreview}
+        >
+          {/* X button positioned at top-right of viewport */}
+          <button
+            onClick={closePreview}
+            className="fixed top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors z-[101]"
+          >
+            <X size={24} />
+          </button>
+
+          <div className="max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            {/* Image preview */}
+            {preview.fileType.startsWith('image/') && (
+              <img
+                src={preview.dataUrl}
+                alt={preview.fileName}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              />
+            )}
+
+            {/* PDF preview */}
+            {preview.fileType === 'application/pdf' && (
+              <iframe
+                src={preview.dataUrl}
+                title={preview.fileName}
+                className="w-[90vw] max-w-4xl h-[80vh] rounded-lg shadow-2xl bg-white"
+              />
+            )}
+
+            {/* Markdown preview */}
+            {preview.fileType === 'text/markdown' && (
+              <div className="w-[90vw] max-w-4xl h-[80vh] overflow-auto bg-helm-surface text-helm-text p-6 rounded-lg shadow-2xl">
+                <div className="prose prose-helm prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {new TextDecoder().decode(Uint8Array.from(atob(preview.dataUrl.split(',')[1]), c => c.charCodeAt(0)))}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {/* Text/JSON preview (non-markdown) */}
+            {(preview.fileType.startsWith('text/') && preview.fileType !== 'text/markdown') || preview.fileType === 'application/json' ? (
+              <pre className="w-[90vw] max-w-4xl h-[80vh] overflow-auto bg-helm-surface text-helm-text p-6 rounded-lg shadow-2xl text-sm font-mono whitespace-pre-wrap">
+                {new TextDecoder().decode(Uint8Array.from(atob(preview.dataUrl.split(',')[1]), c => c.charCodeAt(0)))}
+              </pre>
+            ) : null}
+
+            <p className="text-center text-helm-text-muted text-sm mt-4 bg-helm-surface/80 px-3 py-1 rounded">{preview.fileName}</p>
+          </div>
+        </div>
       )}
     </div>
   )

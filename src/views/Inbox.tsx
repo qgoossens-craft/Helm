@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, ArrowRight, Check } from 'lucide-react'
-import { useTasksStore, useProjectsStore, useUIStore } from '../store'
+import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User } from 'lucide-react'
+import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
 
 export function Inbox() {
   const [newItem, setNewItem] = useState('')
@@ -221,11 +221,14 @@ interface MoveToProjectModalProps {
 
 function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
   const { isMoveToProjectOpen, moveTaskId, closeMoveToProject, addToast } = useUIStore()
-  const { moveToProject } = useTasksStore()
+  const { moveToProject, getTaskById, deleteTask } = useTasksStore()
+  const { createTodo } = useQuickTodosStore()
 
   if (!isMoveToProjectOpen || !moveTaskId) return null
 
-  const handleMove = async (projectId: string) => {
+  const task = getTaskById(moveTaskId)
+
+  const handleMoveToProject = async (projectId: string) => {
     try {
       const project = projects.find(p => p.id === projectId)
       await moveToProject(moveTaskId, projectId)
@@ -236,28 +239,71 @@ function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
     }
   }
 
+  const handleMoveToTodos = async (list: 'personal' | 'work') => {
+    if (!task) return
+    try {
+      await createTodo({ title: task.title, list })
+      await deleteTask(moveTaskId)
+      addToast('success', `Moved to ${list === 'personal' ? 'Personal' : 'Work'} todos`)
+      closeMoveToProject()
+    } catch (err) {
+      addToast('error', (err as Error).message)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-backdrop">
       <div className="bg-helm-surface border border-helm-border rounded-xl w-full max-w-sm p-6 modal-content">
-        <h2 className="text-lg font-medium text-helm-text mb-4">Move to Project</h2>
+        <h2 className="text-lg font-medium text-helm-text mb-4">Move to...</h2>
 
-        {projects.length === 0 ? (
-          <p className="text-helm-text-muted text-sm mb-4">
-            No projects available. Create a project first.
+        {/* Todos section */}
+        <div className="mb-4">
+          <p className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 flex items-center gap-2">
+            <ListTodo size={12} />
+            Todos
           </p>
-        ) : (
-          <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => handleMove(project.id)}
-                className="w-full text-left px-4 py-3 rounded-lg bg-helm-bg hover:bg-helm-surface-elevated text-helm-text transition-colors"
-              >
-                {project.name}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <button
+              onClick={() => handleMoveToTodos('personal')}
+              className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg bg-helm-bg hover:bg-helm-surface-elevated text-helm-text transition-colors"
+            >
+              <User size={16} className="text-helm-text-muted" />
+              Personal
+            </button>
+            <button
+              onClick={() => handleMoveToTodos('work')}
+              className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg bg-helm-bg hover:bg-helm-surface-elevated text-helm-text transition-colors"
+            >
+              <Briefcase size={16} className="text-helm-text-muted" />
+              Work
+            </button>
           </div>
-        )}
+        </div>
+
+        {/* Projects section */}
+        <div className="mb-4">
+          <p className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 flex items-center gap-2">
+            <FolderKanban size={12} />
+            Projects
+          </p>
+          {projects.length === 0 ? (
+            <p className="text-helm-text-muted text-sm py-2">
+              No projects available
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => handleMoveToProject(project.id)}
+                  className="w-full text-left px-4 py-3 rounded-lg bg-helm-bg hover:bg-helm-surface-elevated text-helm-text transition-colors"
+                >
+                  {project.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={closeMoveToProject}

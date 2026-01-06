@@ -1,4 +1,54 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Custom prose styling for markdown preview - adapts to theme */
+.prose-helm {
+  --tw-prose-body: var(--color-helm-text);
+  --tw-prose-headings: var(--color-helm-text);
+  --tw-prose-lead: var(--color-helm-text-muted);
+  --tw-prose-links: var(--color-helm-primary);
+  --tw-prose-bold: var(--color-helm-text);
+  --tw-prose-counters: var(--color-helm-text-muted);
+  --tw-prose-bullets: var(--color-helm-text-muted);
+  --tw-prose-hr: var(--color-helm-border);
+  --tw-prose-quotes: var(--color-helm-text);
+  --tw-prose-quote-borders: var(--color-helm-primary);
+  --tw-prose-captions: var(--color-helm-text-muted);
+  --tw-prose-code: var(--color-helm-primary);
+  --tw-prose-pre-code: var(--color-helm-text);
+  --tw-prose-pre-bg: var(--color-helm-bg);
+  --tw-prose-th-borders: var(--color-helm-border);
+  --tw-prose-td-borders: var(--color-helm-border);
+}
+
+/* Better code block styling */
+.prose-helm pre {
+  border: 1px solid var(--color-helm-border);
+}
+
+.prose-helm code:not(pre code) {
+  background: var(--color-helm-bg);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+/* Table styling for markdown */
+.prose-helm table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.prose-helm th,
+.prose-helm td {
+  border: 1px solid var(--color-helm-border);
+  padding: 0.5rem 0.75rem;
+}
+
+.prose-helm th {
+  background: var(--color-helm-bg);
+  font-weight: 600;
+}
 
 /* Custom theme variables for Helm */
 @theme {

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useTasksStore, useUIStore } from '../store'
 import type { Task, Document } from '../types/global'
 
@@ -277,10 +279,17 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     }
   }
 
+  const canPreview = (fileType: string) => {
+    return fileType.startsWith('image/') ||
+           fileType === 'application/pdf' ||
+           fileType.startsWith('text/') ||
+           fileType === 'application/json'
+  }
+
   const handlePreviewDocument = async (doc: Document) => {
-    // Only preview images
-    if (!doc.file_type.startsWith('image/')) {
-      addToast('info', 'Preview only available for images')
+    if (!canPreview(doc.file_type)) {
+      // Open with system default app
+      handleOpenExternal(doc)
       return
     }
 
@@ -298,6 +307,17 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       }
     } catch (err) {
       addToast('error', 'Failed to load preview')
+    }
+  }
+
+  const handleOpenExternal = async (doc: Document) => {
+    try {
+      const result = await window.api.documents.openExternal(doc.id)
+      if (result && result !== '') {
+        addToast('error', `Failed to open: ${result}`)
+      }
+    } catch (err) {
+      addToast('error', 'Failed to open document')
     }
   }
 
@@ -553,16 +573,16 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
                     ) : (
                       <p
                         className={`text-sm text-helm-text truncate ${
-                          doc.file_type.startsWith('image/') && doc.processing_status === 'completed'
+                          doc.processing_status === 'completed'
                             ? 'cursor-pointer hover:text-helm-primary'
                             : ''
                         }`}
                         onClick={() => {
-                          if (doc.file_type.startsWith('image/') && doc.processing_status === 'completed') {
+                          if (doc.processing_status === 'completed') {
                             handlePreviewDocument(doc)
                           }
                         }}
-                        title={doc.file_type.startsWith('image/') ? 'Click to preview' : doc.name}
+                        title={doc.processing_status === 'completed' ? 'Click to open' : doc.name}
                       >
                         {doc.name}
                       </p>
@@ -650,25 +670,58 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
         </p>
       </div>
 
-      {/* Image Preview Modal */}
+      {/* Document Preview Modal */}
       {preview.isOpen && preview.dataUrl && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-8"
           onClick={closePreview}
         >
-          <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={closePreview}
-              className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white transition-colors"
-            >
-              <X size={24} />
-            </button>
-            <img
-              src={preview.dataUrl}
-              alt={preview.fileName}
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-            />
-            <p className="text-center text-white/60 text-sm mt-4">{preview.fileName}</p>
+          {/* X button positioned at top-right of viewport */}
+          <button
+            onClick={closePreview}
+            className="fixed top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors z-[101]"
+          >
+            <X size={24} />
+          </button>
+
+          <div className="max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            {/* Image preview */}
+            {preview.fileType.startsWith('image/') && (
+              <img
+                src={preview.dataUrl}
+                alt={preview.fileName}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              />
+            )}
+
+            {/* PDF preview */}
+            {preview.fileType === 'application/pdf' && (
+              <iframe
+                src={preview.dataUrl}
+                title={preview.fileName}
+                className="w-[90vw] max-w-4xl h-[80vh] rounded-lg shadow-2xl bg-white"
+              />
+            )}
+
+            {/* Markdown preview */}
+            {preview.fileType === 'text/markdown' && (
+              <div className="w-[90vw] max-w-4xl h-[80vh] overflow-auto bg-helm-surface text-helm-text p-6 rounded-lg shadow-2xl">
+                <div className="prose prose-helm prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {new TextDecoder().decode(Uint8Array.from(atob(preview.dataUrl.split(',')[1]), c => c.charCodeAt(0)))}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {/* Text/JSON preview (non-markdown) */}
+            {(preview.fileType.startsWith('text/') && preview.fileType !== 'text/markdown') || preview.fileType === 'application/json' ? (
+              <pre className="w-[90vw] max-w-4xl h-[80vh] overflow-auto bg-helm-surface text-helm-text p-6 rounded-lg shadow-2xl text-sm font-mono whitespace-pre-wrap">
+                {new TextDecoder().decode(Uint8Array.from(atob(preview.dataUrl.split(',')[1]), c => c.charCodeAt(0)))}
+              </pre>
+            ) : null}
+
+            <p className="text-center text-helm-text-muted text-sm mt-4 bg-helm-surface/80 px-3 py-1 rounded">{preview.fileName}</p>
           </div>
         </div>
       )}

@@ -312,7 +312,12 @@ export function getDocumentDataUrl(documentId: string): string | null {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
-      '.webp': 'image/webp'
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.json': 'application/json',
+      '.html': 'text/html'
     }
 
     const mimeType = mimeTypes[ext] || 'application/octet-stream'

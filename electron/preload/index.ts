@@ -166,6 +166,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('documents:getDataUrl', documentId),
     rename: (documentId: string, newName: string): Promise<void> =>
       ipcRenderer.invoke('documents:rename', documentId, newName),
+    openExternal: (documentId: string): Promise<string> =>
+      ipcRenderer.invoke('documents:openExternal', documentId),
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('documents:delete', id),
     search: (query: string, projectId?: string, taskId?: string): Promise<DocumentSearchResult[]> =>

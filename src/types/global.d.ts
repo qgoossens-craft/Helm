@@ -134,6 +134,11 @@ declare global {
         getByProject: (projectId: string) => Promise<Document[]>
         upload: (taskId: string | null, projectId: string | null) => Promise<UploadResult | null>
         uploadFile: (filePath: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
+        uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
+        getFilePath: (documentId: string) => Promise<string | null>
+        getDataUrl: (documentId: string) => Promise<string | null>
+        rename: (documentId: string, newName: string) => Promise<void>
+        openExternal: (documentId: string) => Promise<string>
         delete: (id: string) => Promise<void>
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }

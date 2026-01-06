@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog, shell } from 'electron'
 import { join } from 'path'
 import { initDatabase, db } from '../database/db'
 import * as ai from '../services/ai'
@@ -134,6 +134,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('documents:rename', async (_, documentId: string, newName: string) => {
     return documents.renameDocument(documentId, newName)
+  })
+
+  ipcMain.handle('documents:openExternal', async (_, documentId: string) => {
+    const filePath = documents.getDocumentFilePath(documentId)
+    if (filePath) {
+      return shell.openPath(filePath)
+    }
+    return 'File not found'
   })
 
   // Quick Todos
