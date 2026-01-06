@@ -1,8 +1,11 @@
 import { create } from 'zustand'
+import type { ThemeId } from '../lib/themes'
+import { applyTheme } from '../lib/themes'
 
 interface Settings {
   name: string
   openai_api_key: string
+  theme: ThemeId
 }
 
 interface SettingsState {
@@ -18,7 +21,8 @@ interface SettingsState {
 
 const defaultSettings: Settings = {
   name: '',
-  openai_api_key: ''
+  openai_api_key: '',
+  theme: 'peach-gradient'
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -30,10 +34,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const allSettings = await window.api.settings.getAll()
+      const theme = (allSettings.theme as ThemeId) || 'peach-gradient'
+
+      // Sync theme from DB to localStorage and DOM
+      applyTheme(theme)
+
       set({
         settings: {
           name: allSettings.name || '',
-          openai_api_key: allSettings.openai_api_key || ''
+          openai_api_key: allSettings.openai_api_key || '',
+          theme
         },
         isLoading: false
       })
@@ -46,6 +56,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ error: null })
     try {
       await window.api.settings.set(key, value)
+
+      // Apply theme immediately when changed
+      if (key === 'theme') {
+        applyTheme(value as ThemeId)
+      }
+
       set((state) => ({
         settings: { ...state.settings, [key]: value }
       }))
@@ -60,8 +76,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     try {
       await Promise.all([
         window.api.settings.set('name', settings.name),
-        window.api.settings.set('openai_api_key', settings.openai_api_key)
+        window.api.settings.set('openai_api_key', settings.openai_api_key),
+        window.api.settings.set('theme', settings.theme)
       ])
+
+      // Apply theme
+      applyTheme(settings.theme)
+
       set({ settings })
     } catch (error) {
       set({ error: (error as Error).message })

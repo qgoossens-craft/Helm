@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
+import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
 import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
@@ -18,8 +19,9 @@ export function Project() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [showDocuments, setShowDocuments] = useState(true)
+  const [showAppearance, setShowAppearance] = useState(false)
 
-  const { projects, fetchProjects } = useProjectsStore()
+  const { projects, fetchProjects, updateProject } = useProjectsStore()
   const { tasks, fetchTasksByProject, createTask, updateTask, deleteTask } = useTasksStore()
   const { addToast } = useUIStore()
 
@@ -326,13 +328,69 @@ export function Project() {
               Status
             </h3>
             <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-              project.status === 'active' ? 'bg-helm-success/20 text-helm-success' :
-              project.status === 'paused' ? 'bg-yellow-500/20 text-yellow-500' :
-              project.status === 'completed' ? 'bg-helm-primary/20 text-helm-primary' :
+              project.status === 'active' ? 'bg-helm-success text-white' :
+              project.status === 'paused' ? 'bg-yellow-500 text-white' :
+              project.status === 'completed' ? 'bg-helm-primary text-white' :
               'bg-helm-surface-elevated text-helm-text-muted'
             }`}>
               {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
             </span>
+          </div>
+
+          {/* Appearance (Color & Icon) */}
+          <div>
+            <button
+              onClick={() => setShowAppearance(!showAppearance)}
+              className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
+            >
+              {showAppearance ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Appearance
+            </button>
+
+            {showAppearance && (
+              <div className="space-y-4">
+                {/* Color */}
+                <div>
+                  <label className="block text-xs text-helm-text-muted mb-2">Color</label>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(PROJECT_COLORS).map(([colorId, colorHex]) => (
+                      <button
+                        key={colorId}
+                        onClick={() => updateProject(project.id, { color: colorId })}
+                        className={`w-6 h-6 rounded-full transition-all ${
+                          (project.color || 'orange') === colorId
+                            ? 'ring-2 ring-offset-2 ring-offset-helm-bg ring-helm-text'
+                            : 'hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: colorHex }}
+                        title={colorId.charAt(0).toUpperCase() + colorId.slice(1)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Icon */}
+                <div>
+                  <label className="block text-xs text-helm-text-muted mb-2">Icon</label>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(PROJECT_ICONS).map(([iconId, IconComponent]) => (
+                      <button
+                        key={iconId}
+                        onClick={() => updateProject(project.id, { icon: iconId })}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                          (project.icon || 'folder') === iconId
+                            ? 'bg-helm-primary text-white'
+                            : 'bg-helm-bg text-helm-text-muted hover:bg-helm-surface-elevated hover:text-helm-text'
+                        }`}
+                        title={iconId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                      >
+                        <IconComponent size={16} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Why */}

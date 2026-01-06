@@ -7,6 +7,8 @@ export interface Project {
   done_definition: string
   status: 'draft' | 'active' | 'paused' | 'completed' | 'abandoned'
   context: 'work' | 'personal'
+  color: string | null
+  icon: string | null
   created_at: string
   updated_at: string
   archived_at: string | null

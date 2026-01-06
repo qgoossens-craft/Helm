@@ -30,6 +30,20 @@ export function getDocumentsPath(): string {
 
 // Run migrations to update existing database schema
 function runMigrations(db: Database.Database): void {
+  // Migration: Add color and icon columns to projects table
+  const projectsInfo = db.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>
+  const projectColumns = projectsInfo.map(col => col.name)
+
+  if (!projectColumns.includes('color')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN color TEXT DEFAULT 'orange'`)
+    console.log('Migration: Added color column to projects')
+  }
+
+  if (!projectColumns.includes('icon')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN icon TEXT DEFAULT 'folder'`)
+    console.log('Migration: Added icon column to projects')
+  }
+
   // Check if documents table exists and needs migration
   const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
   const columnNames = tableInfo.map(col => col.name)
@@ -141,6 +155,8 @@ interface Project {
   done_definition: string
   status: 'draft' | 'active' | 'paused' | 'completed' | 'abandoned'
   context: 'work' | 'personal'
+  color: string | null
+  icon: string | null
   created_at: string
   updated_at: string
   archived_at: string | null
@@ -245,8 +261,8 @@ export const db = {
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO projects (id, name, why, done_definition, status, context, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, why, done_definition, status, context, color, icon, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -256,6 +272,8 @@ export const db = {
         project.done_definition,
         project.status || 'active',
         project.context || 'personal',
+        project.color || 'orange',
+        project.icon || 'folder',
         timestamp,
         timestamp
       )
@@ -289,6 +307,14 @@ export const db = {
       if (updates.context !== undefined) {
         fields.push('context = ?')
         values.push(updates.context)
+      }
+      if (updates.color !== undefined) {
+        fields.push('color = ?')
+        values.push(updates.color)
+      }
+      if (updates.icon !== undefined) {
+        fields.push('icon = ?')
+        values.push(updates.icon)
       }
       if (updates.archived_at !== undefined) {
         fields.push('archived_at = ?')

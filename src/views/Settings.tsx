@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../store'
 import { Check, AlertCircle } from 'lucide-react'
+import type { ThemeId } from '../lib/themes'
+import { themes } from '../lib/themes'
 
 export function Settings() {
-  const { settings, fetchSettings, saveAllSettings } = useSettingsStore()
+  const { settings, fetchSettings, saveAllSettings, updateSetting } = useSettingsStore()
   const [name, setName] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
@@ -22,11 +24,19 @@ export function Settings() {
   const handleSave = async () => {
     setSaveStatus('saving')
     try {
-      await saveAllSettings({ name, openai_api_key: apiKey })
+      await saveAllSettings({ name, openai_api_key: apiKey, theme: settings.theme })
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch (error) {
       setSaveStatus('error')
+    }
+  }
+
+  const handleThemeChange = async (themeId: ThemeId) => {
+    try {
+      await updateSetting('theme', themeId)
+    } catch (error) {
+      console.error('Failed to update theme:', error)
     }
   }
 
@@ -56,6 +66,40 @@ export function Settings() {
       <h1 className="text-2xl font-semibold text-helm-text mb-8">Settings</h1>
 
       <div className="space-y-8">
+        {/* Appearance */}
+        <section>
+          <h2 className="text-sm font-medium text-helm-text-muted uppercase tracking-wider mb-4">
+            Appearance
+          </h2>
+          <div>
+            <label className="block text-sm text-helm-text mb-3">Theme</label>
+            <div className="grid grid-cols-2 gap-3">
+              {themes.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => handleThemeChange(theme.id)}
+                  className={`relative p-1 rounded-xl transition-all ${
+                    settings.theme === theme.id
+                      ? 'ring-2 ring-helm-primary ring-offset-2 ring-offset-helm-bg'
+                      : 'hover:ring-2 hover:ring-helm-border hover:ring-offset-2 hover:ring-offset-helm-bg'
+                  }`}
+                >
+                  <div
+                    className="h-16 rounded-lg mb-2"
+                    style={{ background: theme.preview }}
+                  />
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-sm text-helm-text">{theme.name}</span>
+                    {settings.theme === theme.id && (
+                      <Check size={14} className="text-helm-primary" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* General */}
         <section>
           <h2 className="text-sm font-medium text-helm-text-muted uppercase tracking-wider mb-4">

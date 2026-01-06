@@ -2,6 +2,7 @@
 
 /* Custom theme variables for Helm */
 @theme {
+  /* Default colors (Obsidian theme) - hardcoded for Tailwind build */
   --color-helm-bg: #0f0f0f;
   --color-helm-surface: #1a1a1a;
   --color-helm-surface-elevated: #242424;
@@ -23,6 +24,61 @@
   --animate-spin: spin 1s linear infinite;
   --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-slide-in-right: slide-in-right 0.2s ease-out;
+}
+
+/* Default: Peach Sunset colors (fallback before JS loads) */
+:root {
+  --color-helm-bg: #fff5ee;
+  --color-helm-surface: #ffe8d6;
+  --color-helm-surface-elevated: #ffd4b8;
+  --color-helm-border: #ffb088;
+  --color-helm-text: #4a2c17;
+  --color-helm-text-muted: #8b5a3c;
+  --color-helm-primary: #ff6b35;
+  --color-helm-primary-hover: #e85a2a;
+  --color-helm-success: #22c55e;
+  --color-helm-warning: #eab308;
+  --color-helm-error: #ef4444;
+  --helm-bg-gradient: linear-gradient(135deg, #ffecd2 0%, #fcb69f 25%, #ee9ca7 50%, #ffdde1 75%, #fcb69f 100%);
+}
+
+/* Theme: Peach Sunset */
+html[data-theme="peach-gradient"] {
+  --color-helm-bg: #fff5ee;
+  --color-helm-surface: #ffe8d6;
+  --color-helm-surface-elevated: #ffd4b8;
+  --color-helm-border: #ffb088;
+  --color-helm-text: #4a2c17;
+  --color-helm-text-muted: #8b5a3c;
+  --color-helm-primary: #ff6b35;
+  --color-helm-primary-hover: #e85a2a;
+  --helm-bg-gradient: linear-gradient(135deg, #ffecd2 0%, #fcb69f 25%, #ee9ca7 50%, #ffdde1 75%, #fcb69f 100%);
+}
+
+/* Theme: Ocean Depths */
+html[data-theme="ocean-gradient"] {
+  --color-helm-bg: #0f1419;
+  --color-helm-surface: #152028;
+  --color-helm-surface-elevated: #1c2a36;
+  --color-helm-border: #2a3d4d;
+  --color-helm-text: #f0f8ff;
+  --color-helm-text-muted: #8ba4b8;
+  --color-helm-primary: #06b6d4;
+  --color-helm-primary-hover: #0891b2;
+  --helm-bg-gradient: linear-gradient(145deg, #0f1419 0%, #0f1f2e 50%, #0f1419 100%);
+}
+
+/* Theme: Forest Mist */
+html[data-theme="forest-gradient"] {
+  --color-helm-bg: #0f140f;
+  --color-helm-surface: #182018;
+  --color-helm-surface-elevated: #1f291f;
+  --color-helm-border: #2d3d2d;
+  --color-helm-text: #f5faf5;
+  --color-helm-text-muted: #8fb58f;
+  --color-helm-primary: #22c55e;
+  --color-helm-primary-hover: #16a34a;
+  --helm-bg-gradient: linear-gradient(145deg, #0f140f 0%, #1a2619 50%, #0f140f 100%);
 }
 
 /* Keyframes */
@@ -92,7 +148,9 @@
 
 /* Base styles */
 body {
-  @apply bg-helm-bg text-helm-text antialiased;
+  @apply text-helm-text antialiased;
+  background: var(--helm-bg-gradient, var(--color-helm-bg));
+  background-attachment: fixed;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 

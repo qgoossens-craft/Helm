@@ -1,7 +1,43 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo } from 'lucide-react'
+import {
+  Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo,
+  Briefcase, Rocket, Target, Star, Heart, Code, Book, Music, Camera,
+  Palette, Gamepad2, GraduationCap, Plane, ShoppingBag, type LucideIcon
+} from 'lucide-react'
 import { useEffect } from 'react'
 import { useProjectsStore, useUIStore } from '../store'
+
+// Project color palette
+export const PROJECT_COLORS: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  amber: '#f59e0b',
+  green: '#22c55e',
+  teal: '#14b8a6',
+  blue: '#3b82f6',
+  purple: '#8b5cf6',
+  pink: '#ec4899',
+}
+
+// Project icon map
+export const PROJECT_ICONS: Record<string, LucideIcon> = {
+  folder: FolderKanban,
+  briefcase: Briefcase,
+  rocket: Rocket,
+  target: Target,
+  star: Star,
+  heart: Heart,
+  code: Code,
+  book: Book,
+  music: Music,
+  camera: Camera,
+  palette: Palette,
+  gamepad: Gamepad2,
+  'graduation-cap': GraduationCap,
+  home: Home,
+  plane: Plane,
+  'shopping-bag': ShoppingBag,
+}
 
 export function Layout() {
   const navigate = useNavigate()
@@ -44,7 +80,7 @@ export function Layout() {
   const activeProjects = projects.filter((p) => p.status !== 'abandoned' && !p.archived_at)
 
   return (
-    <div className="flex h-screen bg-helm-bg">
+    <div className="flex h-screen">
       {/* Sidebar */}
       <aside className="w-60 border-r border-helm-border flex flex-col">
         {/* Drag region for window with logo before traffic lights */}
@@ -75,22 +111,26 @@ export function Layout() {
           {/* Projects list */}
           {activeProjects.length > 0 ? (
             <div className="space-y-1">
-              {activeProjects.map((project) => (
-                <NavLink
-                  key={project.id}
-                  to={`/project/${project.id}`}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive
-                        ? 'bg-helm-primary text-white'
-                        : 'text-helm-text-muted hover:bg-helm-surface hover:text-helm-text'
-                    }`
-                  }
-                >
-                  <FolderKanban size={16} />
-                  <span className="truncate">{project.name}</span>
-                </NavLink>
-              ))}
+              {activeProjects.map((project) => {
+                const IconComponent = PROJECT_ICONS[project.icon || 'folder'] || FolderKanban
+                const projectColor = PROJECT_COLORS[project.color || 'orange'] || PROJECT_COLORS.orange
+                return (
+                  <NavLink
+                    key={project.id}
+                    to={`/project/${project.id}`}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? 'bg-helm-surface-elevated text-helm-text'
+                          : 'text-helm-text-muted hover:bg-helm-surface hover:text-helm-text'
+                      }`
+                    }
+                  >
+                    <IconComponent size={16} className="shrink-0" style={{ color: projectColor }} />
+                    <span className="truncate">{project.name}</span>
+                  </NavLink>
+                )
+              })}
             </div>
           ) : (
             <div className="px-3 py-2 text-sm text-helm-text-muted">No projects yet</div>
@@ -113,13 +153,13 @@ export function Layout() {
         {/* Top bar with drag region */}
         <div className="h-12 drag-region flex items-center justify-end px-4">
           <button
-            className="no-drag flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-helm-surface text-sm text-helm-text-muted hover:text-helm-text transition-colors"
+            className="no-drag flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
             onClick={() => openCopilot()}
           >
             <Sparkles size={16} />
             <span>Jeeves</span>
-            <kbd className="text-xs text-helm-text-muted/60 px-1 py-0.5 rounded border border-helm-border">⌘</kbd>
-            <kbd className="text-xs text-helm-text-muted/60 px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
+            <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">⌘</kbd>
+            <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
           </button>
         </div>
 
