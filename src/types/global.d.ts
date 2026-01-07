@@ -86,6 +86,11 @@ export interface ChatResponse {
   conversationId: string
 }
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface VaultFile {
   path: string
   name: string
@@ -158,7 +163,7 @@ declare global {
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
       copilot: {
-        chat: (message: string, projectId?: string, taskId?: string) => Promise<ChatResponse>
+        chat: (message: string, projectId?: string, taskId?: string, conversationHistory?: ConversationMessage[]) => Promise<ChatResponse>
         parseProjectBrainDump: (brainDump: string) => Promise<ParsedProject>
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
       }

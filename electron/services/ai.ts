@@ -1,6 +1,23 @@
 import OpenAI from 'openai'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { db } from '../database/db'
 import { searchDocuments } from './documents'
+
+// Conversation message type for history
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+// Limit history to avoid token overflow
+const MAX_HISTORY_MESSAGES = 20 // Keep last 20 messages (10 exchanges)
+
+function trimHistory(history: ConversationMessage[]): ConversationMessage[] {
+  if (history.length <= MAX_HISTORY_MESSAGES) {
+    return history
+  }
+  return history.slice(-MAX_HISTORY_MESSAGES)
+}
 
 // AI Context for injecting into prompts
 interface AIContext {
@@ -33,6 +50,10 @@ interface AIContext {
     documentName: string
     content: string
     relevance: number
+  }>
+  recentConversations?: Array<{
+    userMessage: string
+    aiResponse: string
   }>
 }
 
@@ -76,6 +97,15 @@ export function buildContext(projectId?: string): AIContext {
         details: a.details || '',
         time: a.created_at
       }))
+
+      // Load recent conversations from previous sessions
+      const recentConvos = db.aiConversations.getRecent(projectId, 3)
+      if (recentConvos.length > 0) {
+        context.recentConversations = recentConvos.map(c => ({
+          userMessage: c.user_message,
+          aiResponse: c.ai_response
+        }))
+      }
     }
   }
 
@@ -127,6 +157,14 @@ ${doc.content}
 `).join('\n')}`
   }
 
+  if (context.recentConversations && context.recentConversations.length > 0) {
+    prompt += `
+
+RECENT CONVERSATIONS (from previous sessions):
+${context.recentConversations.map(c => `User asked: "${c.userMessage.substring(0, 100)}${c.userMessage.length > 100 ? '...' : ''}"
+You answered: "${c.aiResponse.substring(0, 150)}${c.aiResponse.length > 150 ? '...' : ''}"`).join('\n\n')}`
+  }
+
   prompt += `
 
 Guidelines:
@@ -143,7 +181,8 @@ Guidelines:
 export async function chat(
   message: string,
   projectId?: string,
-  taskId?: string
+  taskId?: string,
+  conversationHistory: ConversationMessage[] = []
 ): Promise<{ response: string; conversationId: string }> {
   const apiKey = db.settings.get('openai_api_key')
   if (!apiKey) {
@@ -172,13 +211,17 @@ export async function chat(
 
   const systemPrompt = buildSystemPrompt(context)
 
+  // Build messages array with full conversation history
+  const messages: ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...trimHistory(conversationHistory),
+    { role: 'user', content: message }
+  ]
+
   try {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
-      ],
+      messages,
       max_tokens: 500,
       temperature: 0.7
     })

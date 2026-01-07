@@ -84,6 +84,11 @@ export interface ChatResponse {
   conversationId: string
 }
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface VaultFile {
   path: string
   name: string
@@ -209,8 +214,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // AI Operations
   copilot: {
-    chat: (message: string, projectId?: string, taskId?: string): Promise<ChatResponse> =>
-      ipcRenderer.invoke('ai:chat', message, projectId, taskId),
+    chat: (message: string, projectId?: string, taskId?: string, conversationHistory?: ConversationMessage[]): Promise<ChatResponse> =>
+      ipcRenderer.invoke('ai:chat', message, projectId, taskId, conversationHistory),
     parseProjectBrainDump: (brainDump: string): Promise<ParsedProject> =>
       ipcRenderer.invoke('ai:parseProjectBrainDump', brainDump),
     suggestTaskBreakdown: (taskTitle: string, projectContext?: string): Promise<string[]> =>
@@ -285,7 +290,7 @@ declare global {
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
       copilot: {
-        chat: (message: string, projectId?: string, taskId?: string) => Promise<ChatResponse>
+        chat: (message: string, projectId?: string, taskId?: string, conversationHistory?: ConversationMessage[]) => Promise<ChatResponse>
         parseProjectBrainDump: (brainDump: string) => Promise<ParsedProject>
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
       }

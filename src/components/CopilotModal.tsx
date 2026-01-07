@@ -1,19 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Send, Loader2, Sparkles, ThumbsUp, ThumbsDown } from 'lucide-react'
-import { useUIStore, useProjectsStore } from '../store'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  conversationId?: string
-}
+import { X, Send, Loader2, Sparkles, RotateCcw } from 'lucide-react'
+import { useUIStore, useProjectsStore, useCopilotStore } from '../store'
+import type { ConversationMessage } from '../types/global'
 
 export function CopilotModal() {
   const { isCopilotOpen, copilotContext, closeCopilot } = useUIStore()
   const { projects } = useProjectsStore()
+  const { messages, addMessage, clearMessages, setProjectContext } = useCopilotStore()
 
-  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -26,10 +20,18 @@ export function CopilotModal() {
     ? projects.find(p => p.id === copilotContext.projectId)
     : null
 
+  // Track project context changes - clear conversation if project changes
+  useEffect(() => {
+    if (isCopilotOpen) {
+      setProjectContext(copilotContext?.projectId || null)
+    }
+  }, [isCopilotOpen, copilotContext?.projectId, setProjectContext])
+
   // Auto-focus input when modal opens
   useEffect(() => {
     if (isCopilotOpen) {
       inputRef.current?.focus()
+      setError(null)
     }
   }, [isCopilotOpen])
 
@@ -38,45 +40,35 @@ export function CopilotModal() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Reset messages when modal opens
-  useEffect(() => {
-    if (isCopilotOpen) {
-      setMessages([])
-      setError(null)
-    }
-  }, [isCopilotOpen])
-
   if (!isCopilotOpen) return null
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input.trim()
-    }
+    const userContent = input.trim()
 
-    setMessages(prev => [...prev, userMessage])
+    // Add user message to store
+    addMessage({ role: 'user', content: userContent })
     setInput('')
     setIsLoading(true)
     setError(null)
 
     try {
-      const { response, conversationId } = await window.api.copilot.chat(
-        userMessage.content,
+      // Pass conversation history to API
+      const conversationHistory = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }))
+
+      const { response } = await window.api.copilot.chat(
+        userContent,
         copilotContext?.projectId,
-        copilotContext?.taskId
+        copilotContext?.taskId,
+        conversationHistory
       )
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response,
-        conversationId
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
+      // Add assistant response to store
+      addMessage({ role: 'assistant', content: response })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -132,12 +124,23 @@ export function CopilotModal() {
               )}
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="p-2 text-helm-text-muted hover:text-helm-text rounded-lg hover:bg-helm-surface-elevated transition-colors"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1">
+            {messages.length > 0 && (
+              <button
+                onClick={clearMessages}
+                className="p-2 text-helm-text-muted hover:text-helm-text rounded-lg hover:bg-helm-surface-elevated transition-colors"
+                title="New conversation"
+              >
+                <RotateCcw size={18} />
+              </button>
+            )}
+            <button
+              onClick={handleClose}
+              className="p-2 text-helm-text-muted hover:text-helm-text rounded-lg hover:bg-helm-surface-elevated transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -165,8 +168,8 @@ export function CopilotModal() {
             </div>
           ) : (
             <>
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+              {messages.map((message, index) => (
+                <MessageBubble key={index} message={message} />
               ))}
               {isLoading && (
                 <div className="flex items-center gap-2 text-helm-text-muted">
@@ -217,7 +220,7 @@ export function CopilotModal() {
 }
 
 interface MessageBubbleProps {
-  message: Message
+  message: ConversationMessage
 }
 
 function MessageBubble({ message }: MessageBubbleProps) {
@@ -233,22 +236,6 @@ function MessageBubble({ message }: MessageBubbleProps) {
         }`}
       >
         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-        {!isUser && message.conversationId && (
-          <div className="flex gap-2 mt-2 pt-2 border-t border-helm-border/50">
-            <button
-              className="p-1 text-helm-text-muted hover:text-helm-success transition-colors"
-              title="Helpful"
-            >
-              <ThumbsUp size={14} />
-            </button>
-            <button
-              className="p-1 text-helm-text-muted hover:text-helm-error transition-colors"
-              title="Not helpful"
-            >
-              <ThumbsDown size={14} />
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )

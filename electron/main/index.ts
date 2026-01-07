@@ -161,8 +161,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
 
   // AI Operations
-  ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string) => {
-    return ai.chat(message, projectId, taskId)
+  ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string, conversationHistory?: ai.ConversationMessage[]) => {
+    return ai.chat(message, projectId, taskId, conversationHistory || [])
   })
 
   ipcMain.handle('ai:parseProjectBrainDump', async (_, brainDump: string) => {

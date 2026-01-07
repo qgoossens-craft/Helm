@@ -648,6 +648,25 @@ export const db = {
         ORDER BY created_at DESC
       `)
       return stmt.all(projectId) as AIConversation[]
+    },
+
+    getRecent(projectId?: string, limit: number = 5): AIConversation[] {
+      if (projectId) {
+        const stmt = getDb().prepare(`
+          SELECT * FROM ai_conversations
+          WHERE project_id = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        `)
+        return stmt.all(projectId, limit) as AIConversation[]
+      } else {
+        const stmt = getDb().prepare(`
+          SELECT * FROM ai_conversations
+          ORDER BY created_at DESC
+          LIMIT ?
+        `)
+        return stmt.all(limit) as AIConversation[]
+      }
     }
   },
 
