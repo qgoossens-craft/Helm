@@ -33,7 +33,7 @@ export function Home() {
   const workTodos = todos.filter((t) => t.list === 'work' && !t.completed).slice(0, 3)
 
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl">
       <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-2">
         {greeting}, {userName}.

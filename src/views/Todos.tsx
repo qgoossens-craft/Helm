@@ -68,7 +68,7 @@ export function Todos() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl">
       <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold text-helm-text mb-6">Quick Todos</h1>
 

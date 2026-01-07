@@ -1,5 +1,5 @@
 // Theme IDs as const array for runtime validation
-export const themeIds = ['peach-gradient', 'ocean-gradient', 'forest-gradient'] as const
+export const themeIds = ['peach-gradient', 'ocean-gradient', 'forest-gradient', 'clio-gradient'] as const
 export type ThemeId = typeof themeIds[number]
 
 export interface ThemeDefinition {
@@ -12,6 +12,7 @@ export const themes: ThemeDefinition[] = [
   { id: 'peach-gradient', name: 'Peach Sunset', preview: 'linear-gradient(135deg, #fff5ee, #ffe8d6, #ffb088)' },
   { id: 'ocean-gradient', name: 'Ocean Depths', preview: 'linear-gradient(145deg, #0f1419, #0f1f2e)' },
   { id: 'forest-gradient', name: 'Forest Mist', preview: 'linear-gradient(145deg, #0f140f, #1a2619)' },
+  { id: 'clio-gradient', name: 'Clio', preview: 'linear-gradient(90deg, #f97171, #fda4af, #67e8f9, #22d3d3)' },
 ]
 
 export function applyTheme(themeId: ThemeId): void {

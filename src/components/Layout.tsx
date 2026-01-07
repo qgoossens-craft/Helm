@@ -92,12 +92,14 @@ export function Layout() {
   const activeProjects = projects.filter((p) => p.status !== 'abandoned' && !p.archived_at)
 
   return (
-    <div className="flex h-screen">
+    <div className="relative flex h-screen pt-10 pb-3 px-3 gap-3">
+      {/* Top drag region for traffic lights area */}
+      <div className="absolute top-0 left-0 right-0 h-10 drag-region" />
       {/* Sidebar */}
-      <aside className="w-60 border-r border-helm-border flex flex-col">
-        {/* Drag region for window with logo before traffic lights */}
-        <div className="h-12 drag-region flex items-center">
-          <span className="text-lg font-semibold text-helm-text no-drag pl-4 pr-20">helm</span>
+      <aside className="w-60 bg-helm-surface rounded-2xl flex flex-col overflow-hidden">
+        {/* Header with branding */}
+        <div className="h-12 drag-region flex items-center px-3">
+          <span className="text-lg font-semibold text-helm-text">helm</span>
         </div>
 
         {/* Navigation */}
@@ -153,7 +155,7 @@ export function Layout() {
         <div className="p-2 border-t border-helm-border">
           <NavLink
             to="/settings"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
           >
             <Settings size={16} />
             <span>Settings</span>
@@ -163,23 +165,23 @@ export function Layout() {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Right panel border - only on project pages */}
-        {isProjectPage && (
-          <div className="absolute right-80 top-0 bottom-0 w-px bg-helm-border" />
-        )}
+        {/* Drag region overlay at top */}
+        <div className="absolute top-0 left-0 right-0 h-10 drag-region z-10" />
 
-        {/* Top bar with drag region */}
-        <div className="h-12 drag-region flex items-center justify-end px-4">
-          <button
-            className="no-drag flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
-            onClick={() => openCopilot()}
-          >
-            <Sparkles size={16} />
-            <span>Jeeves</span>
-            <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">⌘</kbd>
-            <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
-          </button>
-        </div>
+        {/* Jeeves button - positioned at top right (hidden on project pages where it's in the right panel) */}
+        {!isProjectPage && (
+          <div className="absolute top-2 right-2 z-20">
+            <button
+              className="no-drag flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface/80 hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors backdrop-blur-sm"
+              onClick={() => openCopilot()}
+            >
+              <Sparkles size={16} />
+              <span>Jeeves</span>
+              <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">⌘</kbd>
+              <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
+            </button>
+          </div>
+        )}
 
         {/* Page content */}
         <div className="flex-1 overflow-hidden">

@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
@@ -34,7 +34,7 @@ export function Project() {
   const { projects, fetchProjects, updateProject, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
   const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask } = useTasksStore()
-  const { addToast } = useUIStore()
+  const { addToast, openCopilot } = useUIStore()
 
   useEffect(() => {
     fetchProjects()
@@ -302,7 +302,7 @@ export function Project() {
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full bg-helm-surface rounded-2xl">
         <div className="text-center">
           <p className="text-helm-text-muted mb-4">Project not found</p>
           <Link to="/" className="text-helm-primary hover:underline">
@@ -314,9 +314,9 @@ export function Project() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full gap-3">
       {/* Main content - Task list or Kanban */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto p-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-auto p-6 bg-helm-surface rounded-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-helm-text truncate">{project.name}</h1>
@@ -439,7 +439,7 @@ export function Project() {
 
       {/* Right panel - Project info (hidden when task selected) */}
       {!selectedTask && (
-      <aside className="w-80 flex-shrink-0 p-6 overflow-auto">
+      <aside className="w-80 flex-shrink-0 p-6 overflow-auto bg-helm-surface rounded-2xl flex flex-col">
         <div className="space-y-6">
           {/* Appearance (Color & Icon) */}
           <div>
@@ -663,6 +663,17 @@ export function Project() {
             )}
           </div>
 
+        </div>
+
+        {/* Jeeves button at bottom */}
+        <div className="mt-auto -mx-6 -mb-6 p-2 border-t border-helm-border">
+          <button
+            onClick={() => openCopilot({ projectId: id })}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
+          >
+            <Sparkles size={16} />
+            <span>Ask Jeeves</span>
+          </button>
         </div>
       </aside>
       )}

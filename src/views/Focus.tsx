@@ -136,7 +136,7 @@ export function Focus() {
 
   if (isLoading) {
     return (
-      <div className="h-full overflow-auto p-6 flex items-center justify-center">
+      <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl flex items-center justify-center">
         <Loader2 size={32} className="text-helm-primary animate-spin" />
       </div>
     )
@@ -144,7 +144,7 @@ export function Focus() {
 
   if (!currentTask || !currentProject) {
     return (
-      <div className="h-full overflow-auto p-6 flex items-center justify-center">
+      <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl flex items-center justify-center">
         <div className="text-center">
           <PartyPopper size={64} className="text-helm-primary mb-6 mx-auto" />
           <h1 className="text-2xl font-semibold text-helm-text mb-2">
@@ -165,7 +165,7 @@ export function Focus() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6 flex items-center justify-center">
+    <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl flex items-center justify-center">
       <div className="text-center max-w-lg">
         {/* Project name */}
         <Link

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil } from 'lucide-react'
+import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTasksStore, useUIStore } from '../store'
+import { MarkdownEditor } from './MarkdownEditor'
 import type { Task, Document } from '../types/global'
 
 interface PreviewState {
@@ -50,7 +51,6 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const { addToast } = useUIStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
-  const descriptionRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     setTitle(task.title)
@@ -63,12 +63,6 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     }
   }, [task])
 
-  // Auto-focus description field for new tasks (those without a description)
-  useEffect(() => {
-    if (!task.description && descriptionRef.current) {
-      descriptionRef.current.focus()
-    }
-  }, [task.id])
 
   useEffect(() => {
     const filtered = tasks.filter((t) => t.parent_task_id === task.id)
@@ -387,7 +381,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   return (
     <div
       ref={panelRef}
-      className="w-80 h-full bg-helm-surface border-l border-helm-border flex flex-col animate-slide-in-right"
+      className="w-80 h-full bg-helm-surface rounded-2xl flex flex-col animate-slide-in-right"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-helm-border">
@@ -450,15 +444,12 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
           <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
             Description
           </label>
-          <textarea
-            ref={descriptionRef}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+          <MarkdownEditor
+            content={description}
+            onChange={setDescription}
             onBlur={handleSave}
-            onPaste={handlePaste}
-            rows={4}
-            className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors resize-none"
-            placeholder="Add a description... (paste screenshots here)"
+            placeholder="Add a description... (use **bold**, *italic*, # headings)"
+            className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text focus-within:border-helm-primary transition-colors"
           />
         </div>
 

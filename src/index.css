@@ -131,6 +131,23 @@ html[data-theme="forest-gradient"] {
   --helm-bg-gradient: linear-gradient(145deg, #0f140f 0%, #1a2619 50%, #0f140f 100%);
 }
 
+/* Theme: Clio (Obsidian-inspired) */
+html[data-theme="clio-gradient"] {
+  --color-helm-bg: rgba(255, 255, 255, 0.95);
+  --color-helm-surface: rgba(255, 255, 255, 0.92);
+  --color-helm-surface-elevated: rgba(255, 255, 255, 0.98);
+  --color-helm-border: rgba(0, 0, 0, 0.06);
+  --color-helm-text: #1a1a1a;
+  --color-helm-text-muted: #737373;
+  --color-helm-primary: #e11d48;
+  --color-helm-primary-hover: #be123c;
+  --color-helm-success: #16a34a;
+  --color-helm-warning: #ca8a04;
+  --color-helm-error: #dc2626;
+  --helm-bg-gradient:
+    linear-gradient(135deg, #ff8a80 0%, #fda4af 20%, #fecdd3 40%, #e0f2f1 55%, #67e8f9 70%, #a78bfa 90%, #c084fc 100%);
+}
+
 /* Keyframes */
 @keyframes fade-in {
   from { opacity: 0; }
@@ -292,4 +309,120 @@ button:active:not(:disabled) {
 .dragging {
   opacity: 0.5;
   transform: rotate(2deg);
+}
+
+/* TipTap editor styles */
+.tiptap,
+.tiptap:focus,
+.ProseMirror,
+.ProseMirror:focus,
+.ProseMirror-focused {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-helm-text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+.tiptap p {
+  margin: 0.5em 0;
+}
+
+.tiptap p:first-child {
+  margin-top: 0;
+}
+
+.tiptap p:last-child {
+  margin-bottom: 0;
+}
+
+.tiptap h1,
+.tiptap h2,
+.tiptap h3 {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+
+.tiptap h1:first-child,
+.tiptap h2:first-child,
+.tiptap h3:first-child {
+  margin-top: 0;
+}
+
+.tiptap h1 {
+  font-size: 1.5em;
+}
+
+.tiptap h2 {
+  font-size: 1.25em;
+}
+
+.tiptap h3 {
+  font-size: 1.1em;
+}
+
+.tiptap strong {
+  font-weight: 600;
+}
+
+.tiptap em {
+  font-style: italic;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.tiptap li {
+  margin: 0.25em 0;
+}
+
+.tiptap ul {
+  list-style-type: disc;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+}
+
+.tiptap code {
+  background: var(--color-helm-surface);
+  padding: 0.125em 0.25em;
+  border-radius: 0.25em;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.tiptap pre {
+  background: var(--color-helm-surface);
+  padding: 0.75em 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.tiptap pre code {
+  background: none;
+  padding: 0;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--color-helm-primary);
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: var(--color-helm-text-muted);
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 1px solid var(--color-helm-border);
+  margin: 1em 0;
 }
