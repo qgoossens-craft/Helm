@@ -32,6 +32,7 @@ export function Home() {
   // Get recent incomplete todos from each list (max 3 each)
   const personalTodos = todos.filter((t) => t.list === 'personal' && !t.completed).slice(0, 3)
   const workTodos = todos.filter((t) => t.list === 'work' && !t.completed).slice(0, 3)
+  const tweaksTodos = todos.filter((t) => t.list === 'tweaks' && !t.completed).slice(0, 3)
 
   return (
     <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl">
@@ -126,8 +127,8 @@ export function Home() {
       )}
 
       {/* Quick Todos preview */}
-      {(personalTodos.length > 0 || workTodos.length > 0) && (
-        <div className="mt-6 grid grid-cols-2 gap-4">
+      {(personalTodos.length > 0 || workTodos.length > 0 || tweaksTodos.length > 0) && (
+        <div className="mt-6 grid grid-cols-3 gap-4">
           {/* Personal list */}
           <div className="p-4 rounded-xl bg-helm-surface border border-helm-border">
             <div className="flex items-center justify-between mb-3">
@@ -168,6 +169,28 @@ export function Home() {
                 ))
               ) : (
                 <p className="text-xs text-helm-text-muted">No work todos</p>
+              )}
+            </div>
+          </div>
+
+          {/* Tweaks list */}
+          <div className="p-4 rounded-xl bg-helm-surface border border-helm-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ListTodo size={16} className="text-helm-primary" />
+                <span className="text-sm font-medium text-helm-primary">Tweaks</span>
+              </div>
+              <Link to="/todos" className="text-xs text-helm-text-muted hover:text-helm-text">
+                View all
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {tweaksTodos.length > 0 ? (
+                tweaksTodos.map((todo) => (
+                  <QuickTodoItem key={todo.id} todo={todo} onToggle={() => toggleComplete(todo.id)} showList={false} />
+                ))
+              ) : (
+                <p className="text-xs text-helm-text-muted">No tweaks todos</p>
               )}
             </div>
           </div>

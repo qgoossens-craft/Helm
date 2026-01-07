@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useTasksStore } from '../store'
+import { useTasksStore, useUIStore, useSettingsStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
 import type { Task, Document } from '../types/global'
 
@@ -48,8 +48,11 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   })
 
   const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
+  const { openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
+  const { settings } = useSettingsStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
+  const wasObsidianBrowserOpen = useRef(false)
 
   useEffect(() => {
     setTitle(task.title)
@@ -80,9 +83,23 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     fetchDocuments()
   }, [task.id])
 
+  // Refetch documents when Obsidian browser closes (after import)
+  useEffect(() => {
+    if (wasObsidianBrowserOpen.current && !isObsidianBrowserOpen) {
+      // Modal just closed, refetch documents
+      window.api.documents.getByTask(task.id).then(setDocuments).catch(console.error)
+    }
+    wasObsidianBrowserOpen.current = isObsidianBrowserOpen
+  }, [isObsidianBrowserOpen, task.id])
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement
+      // Don't close if clicking on a modal backdrop or inside a modal
+      if (target.closest('.modal-backdrop') || target.closest('.modal-content')) {
+        return
+      }
+      if (panelRef.current && !panelRef.current.contains(target)) {
         handleSave()
         onClose()
       }
@@ -439,6 +456,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             onBlur={handleSave}
             placeholder="Add a description... (use **bold**, *italic*, # headings)"
             className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text focus-within:border-helm-primary transition-colors"
+            autoFocus
           />
         </div>
 
@@ -629,23 +647,34 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
                 </p>
               )}
 
-              <button
-                onClick={handleUploadDocument}
-                disabled={isUploading}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={14} />
-                    Add document
-                  </>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUploadDocument}
+                  disabled={isUploading}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} />
+                      Add document
+                    </>
+                  )}
+                </button>
+                {settings.obsidian_vault_path && (
+                  <button
+                    onClick={() => openObsidianBrowser({ projectId, taskId: task.id })}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors"
+                    title="Import from Obsidian"
+                  >
+                    <BookOpen size={14} />
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
           )}
         </div>

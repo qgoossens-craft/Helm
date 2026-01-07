@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore, useProjectsStore } from '../store'
-import { Check, AlertCircle, ChevronDown, ChevronRight, Home, Inbox, Focus, ListTodo } from 'lucide-react'
+import { Check, AlertCircle, ChevronDown, ChevronRight, Home, Inbox, Focus, ListTodo, FolderOpen } from 'lucide-react'
 import type { ThemeId } from '../lib/themes'
 import { themes } from '../lib/themes'
 import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
@@ -305,6 +305,42 @@ export function Settings() {
           </div>
         </section>
 
+        {/* Obsidian Integration */}
+        <section>
+          <h2 className="text-sm font-medium text-helm-text-muted uppercase tracking-wider mb-4">
+            Obsidian
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-helm-text mb-2">Vault Path</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={settings.obsidian_vault_path || ''}
+                  onChange={(e) => updateSetting('obsidian_vault_path', e.target.value)}
+                  placeholder="/Users/username/Obsidian/MyVault"
+                  className="flex-1 px-4 py-2 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors font-mono text-sm"
+                />
+                <button
+                  onClick={async () => {
+                    const path = await window.api.obsidian.selectVaultPath()
+                    if (path) {
+                      await updateSetting('obsidian_vault_path', path)
+                    }
+                  }}
+                  className="px-4 py-2 bg-helm-surface border border-helm-border rounded-lg text-helm-text-muted hover:text-helm-text transition-colors flex items-center gap-2"
+                >
+                  <FolderOpen size={16} />
+                  Browse
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-helm-text-muted">
+                Path to your Obsidian vault. You can import notes from here into projects.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Data */}
         <section>
           <h2 className="text-sm font-medium text-helm-text-muted uppercase tracking-wider mb-4">
@@ -330,10 +366,11 @@ export function Settings() {
           <h2 className="text-sm font-medium text-helm-text-muted uppercase tracking-wider mb-4">
             Keyboard Shortcuts
           </h2>
-          <div className="space-y-3">
-            <ShortcutRow label="Quick capture" shortcut="⌘N" />
-            <ShortcutRow label="Open copilot" shortcut="⌘K" />
-            <ShortcutRow label="Focus mode" shortcut="⌘⇧F" />
+          <div className="grid grid-cols-2 gap-3">
+            <ShortcutCard label="Quick switcher" shortcut="⌘⌘" />
+            <ShortcutCard label="Global capture" shortcut="⌘↵" />
+            <ShortcutCard label="Open Jeeves" shortcut="⌘K" />
+            <ShortcutCard label="Focus mode" shortcut="⌘⇧F" />
           </div>
         </section>
       </div>
@@ -362,13 +399,13 @@ export function Settings() {
   )
 }
 
-function ShortcutRow({ label, shortcut }: { label: string; shortcut: string }) {
+function ShortcutCard({ label, shortcut }: { label: string; shortcut: string }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-sm text-helm-text">{label}</span>
-      <kbd className="px-3 py-1 bg-helm-surface border border-helm-border rounded text-sm text-helm-text-muted font-mono">
+    <div className="flex flex-col items-center gap-2 p-4 bg-helm-bg border border-helm-border rounded-lg">
+      <kbd className="px-4 py-2 bg-helm-surface border border-helm-border rounded-lg text-lg text-helm-text font-mono">
         {shortcut}
       </kbd>
+      <span className="text-xs text-helm-text-muted">{label}</span>
     </div>
   )
 }

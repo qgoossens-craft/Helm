@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { db, getDocumentsPath } from '../database/db'
-import { join, extname, basename } from 'path'
-import { copyFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, statSync, writeFileSync } from 'fs'
+import { join, extname, basename, relative } from 'path'
+import { copyFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, statSync, writeFileSync, readdirSync } from 'fs'
 import pdfParse from 'pdf-parse'
 import mammoth from 'mammoth'
 import Tesseract from 'tesseract.js'
@@ -449,4 +449,73 @@ export async function processClipboardUpload(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return { success: false, documentId: '', error: errorMessage }
   }
+}
+
+// Obsidian vault integration
+export interface VaultFile {
+  path: string
+  name: string
+  relativePath: string
+}
+
+// List all .md files in an Obsidian vault recursively
+export function listObsidianFiles(vaultPath: string): VaultFile[] {
+  const files: VaultFile[] = []
+
+  if (!existsSync(vaultPath)) {
+    return files
+  }
+
+  function scanDir(dirPath: string) {
+    const entries = readdirSync(dirPath, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name)
+
+      // Skip hidden files/folders (like .obsidian, .git, etc.)
+      if (entry.name.startsWith('.')) continue
+
+      if (entry.isDirectory()) {
+        scanDir(fullPath)
+      } else if (entry.isFile() && extname(entry.name).toLowerCase() === '.md') {
+        files.push({
+          path: fullPath,
+          name: entry.name,
+          relativePath: relative(vaultPath, fullPath)
+        })
+      }
+    }
+  }
+
+  scanDir(vaultPath)
+
+  // Sort by relative path for easier navigation
+  files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+
+  return files
+}
+
+// Import multiple files from Obsidian vault
+export async function importObsidianFiles(
+  filePaths: string[],
+  projectId: string | null,
+  taskId: string | null
+): Promise<{ imported: number; failed: number; errors: Array<{ file: string; error: string }> }> {
+  const results = {
+    imported: 0,
+    failed: 0,
+    errors: [] as Array<{ file: string; error: string }>
+  }
+
+  for (const filePath of filePaths) {
+    const result = await processUpload(filePath, taskId, projectId)
+    if (result.success) {
+      results.imported++
+    } else {
+      results.failed++
+      results.errors.push({ file: basename(filePath), error: result.error || 'Unknown error' })
+    }
+  }
+
+  return results
 }

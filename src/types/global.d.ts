@@ -86,10 +86,22 @@ export interface ChatResponse {
   conversationId: string
 }
 
+export interface VaultFile {
+  path: string
+  name: string
+  relativePath: string
+}
+
+export interface ObsidianImportResult {
+  imported: number
+  failed: number
+  errors: Array<{ file: string; error: string }>
+}
+
 export interface QuickTodo {
   id: string
   title: string
-  list: 'personal' | 'work'
+  list: 'personal' | 'work' | 'tweaks'
   due_date: string | null
   completed: boolean
   completed_at: string | null
@@ -151,13 +163,18 @@ declare global {
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
       }
       quickTodos: {
-        getAll: (list?: 'personal' | 'work') => Promise<QuickTodo[]>
+        getAll: (list?: 'personal' | 'work' | 'tweaks') => Promise<QuickTodo[]>
         getById: (id: string) => Promise<QuickTodo | null>
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
-        create: (todo: { title: string; list: 'personal' | 'work'; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work'; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+      }
+      obsidian: {
+        selectVaultPath: () => Promise<string | null>
+        listFiles: (vaultPath: string) => Promise<VaultFile[]>
+        importFiles: (filePaths: string[], projectId: string | null, taskId: string | null) => Promise<ObsidianImportResult>
       }
       onShortcut: (channel: string, callback: () => void) => () => void
     }

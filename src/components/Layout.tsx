@@ -7,6 +7,7 @@ import {
 import { useEffect, useCallback } from 'react'
 import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
 import { QuickSwitcher, useDoubleTapCmd } from './QuickSwitcher'
+import { ObsidianBrowserModal } from './ObsidianBrowserModal'
 
 // Project color palette
 export const PROJECT_COLORS: Record<string, string> = {
@@ -199,6 +200,9 @@ export function Layout() {
 
       {/* Quick Switcher modal */}
       <QuickSwitcher />
+
+      {/* Obsidian Browser modal */}
+      <ObsidianBrowserModal />
     </div>
   )
 }

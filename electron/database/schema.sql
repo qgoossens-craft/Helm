@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS quick_todos (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     list TEXT NOT NULL DEFAULT 'personal'
-        CHECK (list IN ('personal', 'work')),
+        CHECK (list IN ('personal', 'work', 'tweaks')),
     due_date TEXT,
     completed INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT,

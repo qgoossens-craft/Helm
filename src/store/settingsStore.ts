@@ -11,6 +11,8 @@ interface Settings {
   nav_inbox_color: string
   nav_focus_color: string
   nav_todos_color: string
+  // Obsidian integration
+  obsidian_vault_path: string
   // Allow additional dynamic keys
   [key: string]: string
 }
@@ -33,7 +35,8 @@ const defaultSettings: Settings = {
   nav_home_color: '',
   nav_inbox_color: '',
   nav_focus_color: '',
-  nav_todos_color: ''
+  nav_todos_color: '',
+  obsidian_vault_path: ''
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

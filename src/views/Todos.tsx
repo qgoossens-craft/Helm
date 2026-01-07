@@ -3,7 +3,7 @@ import { Plus, Trash2, Calendar, Check } from 'lucide-react'
 import { useQuickTodosStore } from '../store'
 import type { QuickTodo } from '../types/global'
 
-type TodoList = 'personal' | 'work'
+type TodoList = 'personal' | 'work' | 'tweaks'
 
 export function Todos() {
   const [activeList, setActiveList] = useState<TodoList>('personal')
@@ -76,7 +76,7 @@ export function Todos() {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeList === 'personal'
               ? 'bg-helm-primary text-white'
-              : 'bg-helm-surface text-helm-text-muted hover:text-helm-text'
+              : 'bg-helm-bg border border-helm-border text-helm-text-muted hover:text-helm-text'
           }`}
         >
           Personal
@@ -86,10 +86,20 @@ export function Todos() {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeList === 'work'
               ? 'bg-helm-primary text-white'
-              : 'bg-helm-surface text-helm-text-muted hover:text-helm-text'
+              : 'bg-helm-bg border border-helm-border text-helm-text-muted hover:text-helm-text'
           }`}
         >
           Work
+        </button>
+        <button
+          onClick={() => setActiveList('tweaks')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeList === 'tweaks'
+              ? 'bg-helm-primary text-white'
+              : 'bg-helm-bg border border-helm-border text-helm-text-muted hover:text-helm-text'
+          }`}
+        >
+          Tweaks
         </button>
       </div>
 
@@ -104,7 +114,7 @@ export function Todos() {
               value={newTodo}
               onChange={(e) => setNewTodo(e.target.value)}
               placeholder={`Add ${activeList} todo...`}
-              className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors"
+              className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors"
             />
           </div>
           <button

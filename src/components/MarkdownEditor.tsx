@@ -12,9 +12,10 @@ interface MarkdownEditorProps {
   onBlur?: () => void
   placeholder?: string
   className?: string
+  autoFocus?: boolean
 }
 
-export function MarkdownEditor({ content, onChange, onBlur, placeholder, className }: MarkdownEditorProps) {
+export function MarkdownEditor({ content, onChange, onBlur, placeholder, className, autoFocus }: MarkdownEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -38,9 +39,10 @@ export function MarkdownEditor({ content, onChange, onBlur, placeholder, classNa
       })
     ],
     content: content || '',
+    autofocus: autoFocus ? 'end' : false,
     onUpdate: ({ editor }) => {
       // Get markdown content for storage
-      const markdown = editor.storage.markdown.getMarkdown()
+      const markdown = (editor.storage as unknown as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown()
       onChange(markdown)
     },
     onBlur: () => {
@@ -55,7 +57,7 @@ export function MarkdownEditor({ content, onChange, onBlur, placeholder, classNa
 
   // Sync content when it changes externally (e.g., switching tasks)
   useEffect(() => {
-    if (editor && editor.storage.markdown.getMarkdown() !== content) {
+    if (editor && (editor.storage as unknown as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown() !== content) {
       editor.commands.setContent(content || '')
     }
   }, [content, editor])

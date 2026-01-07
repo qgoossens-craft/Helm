@@ -18,6 +18,13 @@ interface UIState {
   // Quick Switcher
   isQuickSwitcherOpen: boolean
 
+  // Obsidian Browser
+  isObsidianBrowserOpen: boolean
+  obsidianBrowserContext: {
+    projectId: string | null
+    taskId: string | null
+  } | null
+
   // Actions
   openCopilot: (context?: { projectId?: string; taskId?: string }) => void
   closeCopilot: () => void
@@ -27,6 +34,8 @@ interface UIState {
   closeMoveToProject: () => void
   openQuickSwitcher: () => void
   closeQuickSwitcher: () => void
+  openObsidianBrowser: (context: { projectId: string | null; taskId: string | null }) => void
+  closeObsidianBrowser: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -36,6 +45,8 @@ export const useUIStore = create<UIState>((set) => ({
   isMoveToProjectOpen: false,
   moveTaskId: null,
   isQuickSwitcherOpen: false,
+  isObsidianBrowserOpen: false,
+  obsidianBrowserContext: null,
 
   openCopilot: (context) => {
     set({ isCopilotOpen: true, copilotContext: context || null })
@@ -67,5 +78,13 @@ export const useUIStore = create<UIState>((set) => ({
 
   closeQuickSwitcher: () => {
     set({ isQuickSwitcherOpen: false })
+  },
+
+  openObsidianBrowser: (context) => {
+    set({ isObsidianBrowserOpen: true, obsidianBrowserContext: context })
+  },
+
+  closeObsidianBrowser: () => {
+    set({ isObsidianBrowserOpen: false, obsidianBrowserContext: null })
   }
 }))

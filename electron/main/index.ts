@@ -41,11 +41,6 @@ function registerGlobalShortcuts(): void {
     mainWindow?.webContents.send('shortcut:copilot')
   })
 
-  // Cmd+N - Quick capture to inbox
-  globalShortcut.register('CommandOrControl+N', () => {
-    mainWindow?.webContents.send('shortcut:quick-capture')
-  })
-
   // Cmd+Shift+F - Focus mode
   globalShortcut.register('CommandOrControl+Shift+F', () => {
     mainWindow?.webContents.send('shortcut:focus-mode')
@@ -157,7 +152,7 @@ function registerIpcHandlers(): void {
   })
 
   // Quick Todos
-  ipcMain.handle('db:quickTodos:getAll', (_, list?: 'personal' | 'work') => db.quickTodos.getAll(list))
+  ipcMain.handle('db:quickTodos:getAll', (_, list?: 'personal' | 'work' | 'tweaks') => db.quickTodos.getAll(list))
   ipcMain.handle('db:quickTodos:getById', (_, id: string) => db.quickTodos.getById(id))
   ipcMain.handle('db:quickTodos:getDueToday', () => db.quickTodos.getDueToday())
   ipcMain.handle('db:quickTodos:getOverdue', () => db.quickTodos.getOverdue())
@@ -176,6 +171,32 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('ai:suggestTaskBreakdown', async (_, taskTitle: string, projectContext?: string) => {
     return ai.suggestTaskBreakdown(taskTitle, projectContext)
+  })
+
+  // Obsidian Integration
+  ipcMain.handle('obsidian:selectVaultPath', async () => {
+    const win = mainWindow || BrowserWindow.getFocusedWindow()
+    if (!win) return null
+
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title: 'Select Obsidian Vault',
+      message: 'Choose your Obsidian vault folder'
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('obsidian:listFiles', async (_, vaultPath: string) => {
+    return documents.listObsidianFiles(vaultPath)
+  })
+
+  ipcMain.handle('obsidian:importFiles', async (_, filePaths: string[], projectId: string | null, taskId: string | null) => {
+    return documents.importObsidianFiles(filePaths, projectId, taskId)
   })
 }
 

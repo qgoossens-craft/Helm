@@ -280,8 +280,8 @@ body {
   background: var(--color-helm-text-muted);
 }
 
-/* Focus styles */
-*:focus-visible {
+/* Focus styles - exclude text inputs which have custom focus styling */
+*:focus-visible:not(input[type="text"]):not(input[type="date"]):not(textarea) {
   @apply outline-none ring-2 ring-helm-primary ring-offset-2 ring-offset-helm-bg;
 }
 

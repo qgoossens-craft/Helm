@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User } from 'lucide-react'
+import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench } from 'lucide-react'
 import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
 
 export function Inbox() {
@@ -88,8 +88,8 @@ export function Inbox() {
               type="text"
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Add item... (Cmd+N)"
-              className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors"
+              placeholder="Add item..."
+              className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors"
             />
           </div>
           <button
@@ -251,7 +251,7 @@ function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
     }
   }
 
-  const handleMoveToTodos = async (list: 'personal' | 'work') => {
+  const handleMoveToTodos = async (list: 'personal' | 'work' | 'tweaks') => {
     if (!task) return
     try {
       await createTodo({ title: task.title, list })
@@ -287,6 +287,13 @@ function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
             >
               <Briefcase size={16} className="text-helm-text-muted" />
               Work
+            </button>
+            <button
+              onClick={() => handleMoveToTodos('tweaks')}
+              className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg bg-helm-bg hover:bg-helm-surface-elevated text-helm-text transition-colors"
+            >
+              <Wrench size={16} className="text-helm-text-muted" />
+              Tweaks
             </button>
           </div>
         </div>

@@ -91,6 +91,51 @@ function runMigrations(db: Database.Database): void {
   // Create indexes if not exists
   db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status)`)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id)`)
+
+  // Migration: Update quick_todos table to support 'tweaks' list value
+  // Check if the table needs migration by trying to insert a test value
+  try {
+    // Try to get the current table SQL to check if it has the old constraint
+    const tableSQL = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='quick_todos'").get() as { sql: string } | undefined
+    if (tableSQL && tableSQL.sql && !tableSQL.sql.includes("'tweaks'")) {
+      console.log('Migration: Updating quick_todos table to support tweaks list...')
+
+      // Recreate the table with the new constraint
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS quick_todos_new (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          list TEXT NOT NULL DEFAULT 'personal'
+              CHECK (list IN ('personal', 'work', 'tweaks')),
+          due_date TEXT,
+          completed INTEGER NOT NULL DEFAULT 0,
+          completed_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `)
+
+      // Copy existing data
+      db.exec(`
+        INSERT INTO quick_todos_new (id, title, list, due_date, completed, completed_at, created_at, updated_at)
+        SELECT id, title, list, due_date, completed, completed_at, created_at, updated_at FROM quick_todos
+      `)
+
+      // Drop old table and rename new one
+      db.exec(`DROP TABLE quick_todos`)
+      db.exec(`ALTER TABLE quick_todos_new RENAME TO quick_todos`)
+
+      // Recreate indexes
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_list ON quick_todos(list)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_due_date ON quick_todos(due_date)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_completed ON quick_todos(completed, completed_at)`)
+
+      console.log('Migration: quick_todos table updated to support tweaks list')
+    }
+  } catch (error) {
+    // Table might not exist yet, which is fine - it will be created with the new schema
+    console.log('Migration: quick_todos table check skipped (table may not exist yet)')
+  }
 }
 
 // Initialize database
@@ -240,7 +285,7 @@ interface SearchResult {
 interface QuickTodo {
   id: string
   title: string
-  list: 'personal' | 'work'
+  list: 'personal' | 'work' | 'tweaks'
   due_date: string | null
   completed: boolean
   completed_at: string | null
@@ -748,7 +793,7 @@ export const db = {
 
   // Quick Todos
   quickTodos: {
-    getAll(list?: 'personal' | 'work'): QuickTodo[] {
+    getAll(list?: 'personal' | 'work' | 'tweaks'): QuickTodo[] {
       // Filter out completed items older than 24 hours
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -796,7 +841,7 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work'; due_date?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
 
@@ -810,7 +855,7 @@ export const db = {
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work'; due_date: string | null; completed: boolean }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 

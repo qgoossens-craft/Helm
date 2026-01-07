@@ -9,11 +9,11 @@ interface QuickTodosState {
   error: string | null
 
   // Actions
-  fetchAll: (list?: 'personal' | 'work') => Promise<void>
+  fetchAll: (list?: 'personal' | 'work' | 'tweaks') => Promise<void>
   fetchDueToday: () => Promise<void>
   fetchOverdue: () => Promise<void>
-  createTodo: (todo: { title: string; list: 'personal' | 'work'; due_date?: string | null }) => Promise<QuickTodo>
-  updateTodo: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work'; due_date: string | null; completed: boolean }>) => Promise<void>
+  createTodo: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }) => Promise<QuickTodo>
+  updateTodo: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>) => Promise<void>
   deleteTodo: (id: string) => Promise<void>
   toggleComplete: (id: string) => Promise<void>
 }
