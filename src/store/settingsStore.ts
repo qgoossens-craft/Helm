@@ -6,6 +6,13 @@ interface Settings {
   name: string
   openai_api_key: string
   theme: ThemeId
+  // Navigation colors
+  nav_home_color: string
+  nav_inbox_color: string
+  nav_focus_color: string
+  nav_todos_color: string
+  // Allow additional dynamic keys
+  [key: string]: string
 }
 
 interface SettingsState {
@@ -15,14 +22,18 @@ interface SettingsState {
 
   // Actions
   fetchSettings: () => Promise<void>
-  updateSetting: (key: keyof Settings, value: string) => Promise<void>
-  saveAllSettings: (settings: Settings) => Promise<void>
+  updateSetting: (key: string, value: string) => Promise<void>
+  saveAllSettings: (settings: Partial<Settings>) => Promise<void>
 }
 
 const defaultSettings: Settings = {
   name: '',
   openai_api_key: '',
-  theme: 'peach-gradient'
+  theme: 'peach-gradient',
+  nav_home_color: '',
+  nav_inbox_color: '',
+  nav_focus_color: '',
+  nav_todos_color: ''
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -39,10 +50,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Sync theme from DB to localStorage and DOM
       applyTheme(theme)
 
+      // Merge all settings from DB with defaults
       set({
         settings: {
-          name: allSettings.name || '',
-          openai_api_key: allSettings.openai_api_key || '',
+          ...defaultSettings,
+          ...allSettings,
           theme
         },
         isLoading: false

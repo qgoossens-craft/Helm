@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Calendar, Check } from 'lucide-react'
-import { useQuickTodosStore, useUIStore } from '../store'
+import { useQuickTodosStore } from '../store'
 import type { QuickTodo } from '../types/global'
 
 type TodoList = 'personal' | 'work'
@@ -11,7 +11,6 @@ export function Todos() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { todos, fetchAll, createTodo, updateTodo, deleteTodo, toggleComplete } = useQuickTodosStore()
-  const { addToast } = useUIStore()
 
   useEffect(() => {
     fetchAll()
@@ -35,10 +34,9 @@ export function Todos() {
         title: newTodo.trim(),
         list: activeList
       })
-      addToast('success', 'Todo added')
       setNewTodo('')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to add todo:', err)
     }
   }
 
@@ -46,16 +44,15 @@ export function Todos() {
     try {
       await toggleComplete(id)
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to toggle todo:', err)
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
       await deleteTodo(id)
-      addToast('success', 'Todo deleted')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to delete todo:', err)
     }
   }
 
@@ -63,7 +60,7 @@ export function Todos() {
     try {
       await updateTodo(id, { due_date: date })
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to set due date:', err)
     }
   }
 

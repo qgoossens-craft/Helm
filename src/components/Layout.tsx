@@ -5,7 +5,7 @@ import {
   Palette, Gamepad2, GraduationCap, Plane, ShoppingBag, type LucideIcon
 } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
-import { useProjectsStore, useUIStore } from '../store'
+import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
 import { QuickSwitcher, useDoubleTapCmd } from './QuickSwitcher'
 
 // Project color palette
@@ -45,6 +45,13 @@ export function Layout() {
   const location = useLocation()
   const { projects, fetchProjects } = useProjectsStore()
   const { openCopilot, openKickoffWizard, openQuickSwitcher } = useUIStore()
+  const { settings, fetchSettings } = useSettingsStore()
+
+  // Get nav colors from settings
+  const getNavColor = (navId: string) => {
+    const colorKey = settings[`nav_${navId}_color` as keyof typeof settings] as string
+    return colorKey ? PROJECT_COLORS[colorKey] : undefined
+  }
 
   // Double-tap Cmd to open Quick Switcher
   const handleDoubleTapCmd = useCallback(() => {
@@ -55,10 +62,11 @@ export function Layout() {
   // Check if we're on a project page (for right panel border)
   const isProjectPage = location.pathname.startsWith('/project/')
 
-  // Fetch projects on mount
+  // Fetch projects and settings on mount
   useEffect(() => {
     fetchProjects()
-  }, [fetchProjects])
+    fetchSettings()
+  }, [fetchProjects, fetchSettings])
 
   // Listen for keyboard shortcuts from Electron
   useEffect(() => {
@@ -104,10 +112,10 @@ export function Layout() {
 
         {/* Navigation */}
         <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          <NavItem to="/" icon={<Home size={18} />} label="Home" end />
-          <NavItem to="/inbox" icon={<Inbox size={18} />} label="Inbox" />
-          <NavItem to="/focus" icon={<Focus size={18} />} label="Focus" />
-          <NavItem to="/todos" icon={<ListTodo size={18} />} label="Todos" />
+          <NavItem to="/" icon={<Home size={18} />} label="Home" iconColor={getNavColor('home')} end />
+          <NavItem to="/inbox" icon={<Inbox size={18} />} label="Inbox" iconColor={getNavColor('inbox')} />
+          <NavItem to="/focus" icon={<Focus size={18} />} label="Focus" iconColor={getNavColor('focus')} />
+          <NavItem to="/todos" icon={<ListTodo size={18} />} label="Todos" iconColor={getNavColor('todos')} />
 
           <div className="pt-4 pb-2 px-3 flex items-center justify-between">
             <span className="text-xs font-medium text-helm-text-muted uppercase tracking-wider">
@@ -184,7 +192,7 @@ export function Layout() {
         )}
 
         {/* Page content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden relative z-20">
           <Outlet />
         </div>
       </main>
@@ -199,10 +207,11 @@ interface NavItemProps {
   to: string
   icon: React.ReactNode
   label: string
+  iconColor?: string
   end?: boolean
 }
 
-function NavItem({ to, icon, label, end }: NavItemProps) {
+function NavItem({ to, icon, label, iconColor, end }: NavItemProps) {
   return (
     <NavLink
       to={to}
@@ -215,8 +224,14 @@ function NavItem({ to, icon, label, end }: NavItemProps) {
         }`
       }
     >
-      {icon}
-      {label}
+      {({ isActive }) => (
+        <>
+          <span style={!isActive && iconColor ? { color: iconColor } : undefined}>
+            {icon}
+          </span>
+          {label}
+        </>
+      )}
     </NavLink>
   )
 }

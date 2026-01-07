@@ -39,7 +39,6 @@ export function QuickSwitcher() {
 
 function QuickSwitcherContent({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
-  const { addToast } = useUIStore()
   const { tasks, inboxTasks, updateTask } = useTasksStore()
   const { projects } = useProjectsStore()
 
@@ -141,11 +140,10 @@ function QuickSwitcherContent({ onClose }: { onClose: () => void }) {
     try {
       const newStatus = result.status === 'done' ? 'todo' : 'done'
       await updateTask(result.id, { status: newStatus })
-      addToast('success', newStatus === 'done' ? 'Task completed!' : 'Task restored')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to toggle task:', err)
     }
-  }, [updateTask, addToast])
+  }, [updateTask])
 
   const handleQueryChange = (value: string) => {
     setQuery(value)

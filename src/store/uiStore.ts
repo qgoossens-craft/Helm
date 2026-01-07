@@ -1,11 +1,5 @@
 import { create } from 'zustand'
 
-interface Toast {
-  id: string
-  type: 'success' | 'error' | 'info'
-  message: string
-}
-
 interface UIState {
   // Copilot modal
   isCopilotOpen: boolean
@@ -24,9 +18,6 @@ interface UIState {
   // Quick Switcher
   isQuickSwitcherOpen: boolean
 
-  // Toasts
-  toasts: Toast[]
-
   // Actions
   openCopilot: (context?: { projectId?: string; taskId?: string }) => void
   closeCopilot: () => void
@@ -36,8 +27,6 @@ interface UIState {
   closeMoveToProject: () => void
   openQuickSwitcher: () => void
   closeQuickSwitcher: () => void
-  addToast: (type: Toast['type'], message: string) => void
-  removeToast: (id: string) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -47,7 +36,6 @@ export const useUIStore = create<UIState>((set) => ({
   isMoveToProjectOpen: false,
   moveTaskId: null,
   isQuickSwitcherOpen: false,
-  toasts: [],
 
   openCopilot: (context) => {
     set({ isCopilotOpen: true, copilotContext: context || null })
@@ -79,18 +67,5 @@ export const useUIStore = create<UIState>((set) => ({
 
   closeQuickSwitcher: () => {
     set({ isQuickSwitcherOpen: false })
-  },
-
-  addToast: (type, message) => {
-    const id = crypto.randomUUID()
-    set((state) => ({
-      toasts: [...state.toasts, { id, type, message }]
-    }))
-  },
-
-  removeToast: (id) => {
-    set((state) => ({
-      toasts: state.toasts.filter((t) => t.id !== id)
-    }))
   }
 }))

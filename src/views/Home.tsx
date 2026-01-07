@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderKanban, ArrowRight, Inbox, AlertCircle, Bell, Check, ListTodo } from 'lucide-react'
+import { ArrowRight, Inbox, AlertCircle, Bell, Check, ListTodo } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useSettingsStore, useUIStore, useQuickTodosStore } from '../store'
+import { PROJECT_ICONS, PROJECT_COLORS } from '../components/Layout'
 import type { QuickTodo } from '../types/global'
 
 export function Home() {
@@ -73,7 +74,7 @@ export function Home() {
       <div className="mt-6 p-4 rounded-xl bg-helm-surface border border-helm-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Inbox size={20} className="text-helm-text-muted" />
+            <Inbox size={20} className="text-helm-primary" />
             <span className="text-helm-text">
               Inbox: {inboxTasks.length} item{inboxTasks.length !== 1 ? 's' : ''} waiting to be sorted
             </span>
@@ -173,15 +174,6 @@ export function Home() {
         </div>
       )}
 
-      {/* Focus mode CTA */}
-      <div className="mt-8 flex justify-center">
-        <Link
-          to="/focus"
-          className="px-6 py-3 bg-helm-surface-elevated hover:bg-helm-border text-helm-text rounded-lg transition-colors"
-        >
-          Enter Focus Mode
-        </Link>
-      </div>
       </div>
     </div>
   )
@@ -194,6 +186,8 @@ interface ProjectCardProps {
     status: string
     context: string
     updated_at: string
+    icon?: string
+    color?: string
   }
 }
 
@@ -208,6 +202,10 @@ function ProjectCard({ project }: ProjectCardProps) {
   const completedTasks = projectTasks.filter((t) => t.status === 'done')
   const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0
 
+  // Get project icon and color
+  const IconComponent = PROJECT_ICONS[project.icon || 'folder'] || PROJECT_ICONS.folder
+  const projectColor = PROJECT_COLORS[project.color || 'orange'] || PROJECT_COLORS.orange
+
   return (
     <Link
       to={`/project/${project.id}`}
@@ -215,7 +213,7 @@ function ProjectCard({ project }: ProjectCardProps) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <FolderKanban size={20} className="text-helm-primary" />
+          <IconComponent size={20} style={{ color: projectColor }} />
           <h3 className="font-medium text-helm-text">{project.name}</h3>
         </div>
         <span className="text-xs px-2 py-1 rounded bg-helm-surface-elevated text-helm-text-muted">
@@ -226,8 +224,8 @@ function ProjectCard({ project }: ProjectCardProps) {
       <div className="flex items-center gap-4">
         <div className="flex-1 h-2 bg-helm-surface-elevated rounded-full overflow-hidden">
           <div
-            className="h-full bg-helm-primary transition-all"
-            style={{ width: `${progress}%` }}
+            className="h-full transition-all"
+            style={{ width: `${progress}%`, backgroundColor: projectColor }}
           />
         </div>
         <span className="text-sm text-helm-text-muted">

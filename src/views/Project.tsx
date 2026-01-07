@@ -5,7 +5,6 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
-import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
 import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
@@ -22,7 +21,6 @@ export function Project() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [showDocuments, setShowDocuments] = useState(true)
-  const [showAppearance, setShowAppearance] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [preview, setPreview] = useState<{
     isOpen: boolean
@@ -31,10 +29,10 @@ export function Project() {
     fileType: string
   }>({ isOpen: false, dataUrl: null, fileName: '', fileType: '' })
 
-  const { projects, fetchProjects, updateProject, deleteProject } = useProjectsStore()
+  const { projects, fetchProjects, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
   const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask } = useTasksStore()
-  const { addToast, openCopilot } = useUIStore()
+  const { openCopilot } = useUIStore()
 
   useEffect(() => {
     fetchProjects()
@@ -125,7 +123,7 @@ export function Project() {
       setIsAddingTask(false)
       setSelectedTask(newTask)
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to create task:', err)
     }
   }
 
@@ -133,37 +131,32 @@ export function Project() {
     try {
       const newStatus = task.status === 'done' ? 'todo' : 'done'
       await updateTask(task.id, { status: newStatus })
-      addToast('success', newStatus === 'done' ? 'Task completed!' : 'Task reopened')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to toggle task status:', err)
     }
   }
 
   const handleDeleteTask = async (taskId: string) => {
     try {
       await deleteTask(taskId)
-      addToast('success', 'Task deleted')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to delete task:', err)
     }
   }
 
   const handleRestoreTask = async (taskId: string) => {
     try {
       await restoreTask(taskId)
-      addToast('success', 'Task restored')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to restore task:', err)
     }
   }
 
   const handleUpdateTaskStatus = async (taskId: string, status: Task['status']) => {
     try {
       await updateTask(taskId, { status })
-      const statusLabels = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' }
-      addToast('success', `Moved to ${statusLabels[status]}`)
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to update task status:', err)
     }
   }
 
@@ -177,13 +170,12 @@ export function Project() {
       if (result.success) {
         const docs = await window.api.documents.getByProject(id)
         setDocuments(docs.filter(d => d.task_id === null))
-        addToast('success', 'Document uploaded and processing')
         pollDocumentStatus(result.documentId)
       } else {
-        addToast('error', result.error || 'Failed to upload document')
+        console.error('Failed to upload document:', result.error)
       }
     } catch (err) {
-      addToast('error', 'Failed to upload document')
+      console.error('Failed to upload document:', err)
     } finally {
       setIsUploading(false)
     }
@@ -199,10 +191,8 @@ export function Project() {
 
         if (doc.processing_status === 'processing' || doc.processing_status === 'pending') {
           setTimeout(checkStatus, 1000)
-        } else if (doc.processing_status === 'completed') {
-          addToast('success', `"${doc.name}" ready for AI assistance`)
         } else if (doc.processing_status === 'failed') {
-          addToast('error', `Failed to process "${doc.name}"`)
+          console.error(`Failed to process "${doc.name}"`)
         }
       } catch (err) {
         console.error('Failed to check document status:', err)
@@ -215,9 +205,8 @@ export function Project() {
     try {
       await window.api.documents.delete(docId)
       setDocuments((prev) => prev.filter((d) => d.id !== docId))
-      addToast('success', 'Document removed')
     } catch (err) {
-      addToast('error', 'Failed to delete document')
+      console.error('Failed to delete document:', err)
     }
   }
 
@@ -244,10 +233,10 @@ export function Project() {
           fileType: doc.file_type
         })
       } else {
-        addToast('error', 'File not found')
+        console.error('File not found')
       }
     } catch (err) {
-      addToast('error', 'Failed to load preview')
+      console.error('Failed to load preview:', err)
     }
   }
 
@@ -255,10 +244,10 @@ export function Project() {
     try {
       const result = await window.api.documents.openExternal(doc.id)
       if (result && result !== '') {
-        addToast('error', `Failed to open: ${result}`)
+        console.error(`Failed to open: ${result}`)
       }
     } catch (err) {
-      addToast('error', 'Failed to open document')
+      console.error('Failed to open document:', err)
     }
   }
 
@@ -281,10 +270,9 @@ export function Project() {
     if (!id) return
     try {
       await deleteProject(id)
-      addToast('success', 'Project deleted')
       navigate('/')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to delete project:', err)
     }
   }
 
@@ -439,64 +427,8 @@ export function Project() {
 
       {/* Right panel - Project info (hidden when task selected) */}
       {!selectedTask && (
-      <aside className="w-80 flex-shrink-0 p-6 overflow-auto bg-helm-surface rounded-2xl flex flex-col">
-        <div className="space-y-6">
-          {/* Appearance (Color & Icon) */}
-          <div>
-            <button
-              onClick={() => setShowAppearance(!showAppearance)}
-              className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
-            >
-              {showAppearance ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              Appearance
-            </button>
-
-            {showAppearance && (
-              <div className="space-y-4">
-                {/* Color */}
-                <div>
-                  <label className="block text-xs text-helm-text-muted mb-2">Color</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(PROJECT_COLORS).map(([colorId, colorHex]) => (
-                      <button
-                        key={colorId}
-                        onClick={() => updateProject(project.id, { color: colorId })}
-                        className={`w-6 h-6 rounded-full transition-all ${
-                          (project.color || 'orange') === colorId
-                            ? 'ring-2 ring-offset-2 ring-offset-helm-bg ring-helm-text'
-                            : 'hover:scale-110'
-                        }`}
-                        style={{ backgroundColor: colorHex }}
-                        title={colorId.charAt(0).toUpperCase() + colorId.slice(1)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Icon */}
-                <div>
-                  <label className="block text-xs text-helm-text-muted mb-2">Icon</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(PROJECT_ICONS).map(([iconId, IconComponent]) => (
-                      <button
-                        key={iconId}
-                        onClick={() => updateProject(project.id, { icon: iconId })}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                          (project.icon || 'folder') === iconId
-                            ? 'bg-helm-primary text-white'
-                            : 'bg-helm-bg text-helm-text-muted hover:bg-helm-surface-elevated hover:text-helm-text'
-                        }`}
-                        title={iconId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                      >
-                        <IconComponent size={16} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
+      <aside className="w-80 flex-shrink-0 bg-helm-surface rounded-2xl flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto p-6 space-y-6">
           {/* Why */}
           <div>
             <h3 className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2">
@@ -666,7 +598,7 @@ export function Project() {
         </div>
 
         {/* Jeeves button at bottom */}
-        <div className="mt-auto -mx-6 -mb-6 p-2 border-t border-helm-border">
+        <div className="p-2 border-t border-helm-border">
           <button
             onClick={() => openCopilot({ projectId: id })}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"

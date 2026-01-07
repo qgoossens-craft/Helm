@@ -8,7 +8,7 @@ type Step = 'braindump' | 'parsing' | 'review' | 'creating'
 
 export function KickoffWizard() {
   const navigate = useNavigate()
-  const { isKickoffWizardOpen, closeKickoffWizard, addToast } = useUIStore()
+  const { isKickoffWizardOpen, closeKickoffWizard } = useUIStore()
   const { createProject, fetchProjects } = useProjectsStore()
   const { createTask } = useTasksStore()
 
@@ -49,10 +49,8 @@ export function KickoffWizard() {
       setEditedContext(parsed.context)
       setEditedTasks([...parsed.tasks])
       setStep('review')
-      addToast('success', 'Project parsed successfully!')
     } catch (err) {
       setError((err as Error).message)
-      addToast('error', (err as Error).message)
       setStep('braindump')
     }
   }
@@ -88,14 +86,11 @@ export function KickoffWizard() {
       // Refresh projects list
       await fetchProjects()
 
-      addToast('success', `Project "${editedName}" created!`)
-
       // Close wizard and navigate to project
       handleClose()
       navigate(`/project/${project.id}`)
     } catch (err) {
       setError((err as Error).message)
-      addToast('error', (err as Error).message)
       setStep('review')
     }
   }

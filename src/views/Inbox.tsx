@@ -7,7 +7,7 @@ export function Inbox() {
   const inputRef = useRef<HTMLInputElement>(null)
   const { inboxTasks, fetchInbox, createTask, updateTask, deleteTask } = useTasksStore()
   const { projects, fetchProjects } = useProjectsStore()
-  const { openMoveToProject, addToast } = useUIStore()
+  const { openMoveToProject } = useUIStore()
 
   useEffect(() => {
     fetchInbox()
@@ -32,10 +32,9 @@ export function Inbox() {
         status: 'todo',
         order: inboxTasks.length
       })
-      addToast('success', 'Item added to inbox')
       setNewItem('')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to add item:', err)
     }
   }
 
@@ -43,9 +42,8 @@ export function Inbox() {
     try {
       const newStatus = currentStatus === 'done' ? 'todo' : 'done'
       await updateTask(id, { status: newStatus })
-      addToast('success', newStatus === 'done' ? 'Item completed' : 'Item restored')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to toggle complete:', err)
     }
   }
 
@@ -56,9 +54,8 @@ export function Inbox() {
   const handleDelete = async (id: string) => {
     try {
       await deleteTask(id)
-      addToast('success', 'Item deleted')
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to delete item:', err)
     }
   }
 
@@ -237,7 +234,7 @@ interface MoveToProjectModalProps {
 }
 
 function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
-  const { isMoveToProjectOpen, moveTaskId, closeMoveToProject, addToast } = useUIStore()
+  const { isMoveToProjectOpen, moveTaskId, closeMoveToProject } = useUIStore()
   const { moveToProject, getTaskById, deleteTask } = useTasksStore()
   const { createTodo } = useQuickTodosStore()
 
@@ -247,12 +244,10 @@ function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
 
   const handleMoveToProject = async (projectId: string) => {
     try {
-      const project = projects.find(p => p.id === projectId)
       await moveToProject(moveTaskId, projectId)
-      addToast('success', `Moved to ${project?.name || 'project'}`)
       closeMoveToProject()
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to move to project:', err)
     }
   }
 
@@ -261,10 +256,9 @@ function MoveToProjectModal({ projects }: MoveToProjectModalProps) {
     try {
       await createTodo({ title: task.title, list })
       await deleteTask(moveTaskId)
-      addToast('success', `Moved to ${list === 'personal' ? 'Personal' : 'Work'} todos`)
       closeMoveToProject()
     } catch (err) {
-      addToast('error', (err as Error).message)
+      console.error('Failed to move to todos:', err)
     }
   }
 

@@ -136,9 +136,9 @@ html[data-theme="clio-gradient"] {
   --color-helm-bg: rgba(255, 255, 255, 0.95);
   --color-helm-surface: rgba(255, 255, 255, 0.92);
   --color-helm-surface-elevated: rgba(255, 255, 255, 0.98);
-  --color-helm-border: rgba(0, 0, 0, 0.06);
-  --color-helm-text: #1a1a1a;
-  --color-helm-text-muted: #737373;
+  --color-helm-border: rgba(0, 0, 0, 0.4);
+  --color-helm-text: #000000;
+  --color-helm-text-muted: #000000;
   --color-helm-primary: #e11d48;
   --color-helm-primary-hover: #be123c;
   --color-helm-success: #16a34a;

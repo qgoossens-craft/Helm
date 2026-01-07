@@ -8,7 +8,6 @@ import { Todos } from './views/Todos'
 import { Settings } from './views/Settings'
 import { KickoffWizard } from './components/KickoffWizard'
 import { CopilotModal } from './components/CopilotModal'
-import { ToastContainer } from './components/Toast'
 
 function App() {
   return (
@@ -27,7 +26,6 @@ function App() {
       {/* Global Modals */}
       <KickoffWizard />
       <CopilotModal />
-      <ToastContainer />
     </BrowserRouter>
   )
 }

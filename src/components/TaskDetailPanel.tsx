@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useTasksStore, useUIStore } from '../store'
+import { useTasksStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
 import type { Task, Document } from '../types/global'
 
@@ -48,7 +48,6 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   })
 
   const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
-  const { addToast } = useUIStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
 
@@ -120,7 +119,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
         status
       })
     } catch (err) {
-      addToast('error', 'Failed to save task')
+      console.error('Failed to save task:', err)
     } finally {
       setIsSaving(false)
     }
@@ -130,9 +129,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     setStatus(newStatus)
     try {
       await updateTask(task.id, { status: newStatus })
-      addToast('success', newStatus === 'done' ? 'Task completed!' : `Status updated`)
     } catch (err) {
-      addToast('error', 'Failed to update status')
+      console.error('Failed to update status:', err)
       setStatus(task.status)
     }
   }
@@ -152,9 +150,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       })
       setNewSubtask('')
       setIsAddingSubtask(false)
-      addToast('success', 'Subtask added')
     } catch (err) {
-      addToast('error', 'Failed to add subtask')
+      console.error('Failed to add subtask:', err)
     }
   }
 
@@ -163,16 +160,15 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       const newStatus = subtask.status === 'done' ? 'todo' : 'done'
       await updateTask(subtask.id, { status: newStatus })
     } catch (err) {
-      addToast('error', 'Failed to update subtask')
+      console.error('Failed to update subtask:', err)
     }
   }
 
   const handleDeleteSubtask = async (subtaskId: string) => {
     try {
       await deleteTask(subtaskId)
-      addToast('success', 'Subtask deleted')
     } catch (err) {
-      addToast('error', 'Failed to delete subtask')
+      console.error('Failed to delete subtask:', err)
     }
   }
 
@@ -180,9 +176,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     try {
       await window.api.documents.delete(docId)
       setDocuments((prev) => prev.filter((d) => d.id !== docId))
-      addToast('success', 'Document removed')
     } catch (err) {
-      addToast('error', 'Failed to delete document')
+      console.error('Failed to delete document:', err)
     }
   }
 
@@ -198,15 +193,13 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
         // Fetch updated document list
         const docs = await window.api.documents.getByTask(task.id)
         setDocuments(docs)
-        addToast('success', 'Document uploaded and processing')
-
         // Poll for processing completion
         pollDocumentStatus(result.documentId)
       } else {
-        addToast('error', result.error || 'Failed to upload document')
+        console.error('Failed to upload document:', result.error)
       }
     } catch (err) {
-      addToast('error', 'Failed to upload document')
+      console.error('Failed to upload document:', err)
     } finally {
       setIsUploading(false)
     }
@@ -224,10 +217,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
         if (doc.processing_status === 'processing' || doc.processing_status === 'pending') {
           // Continue polling
           setTimeout(checkStatus, 1000)
-        } else if (doc.processing_status === 'completed') {
-          addToast('success', `"${doc.name}" ready for AI assistance`)
         } else if (doc.processing_status === 'failed') {
-          addToast('error', `Failed to process "${doc.name}"`)
+          console.error(`Failed to process "${doc.name}"`)
         }
       } catch (err) {
         console.error('Failed to check document status:', err)
@@ -266,13 +257,12 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
           if (result.success) {
             const docs = await window.api.documents.getByTask(task.id)
             setDocuments(docs)
-            addToast('success', 'Screenshot attached')
             pollDocumentStatus(result.documentId)
           } else {
-            addToast('error', result.error || 'Failed to upload screenshot')
+            console.error('Failed to upload screenshot:', result.error)
           }
         } catch (err) {
-          addToast('error', 'Failed to upload screenshot')
+          console.error('Failed to upload screenshot:', err)
         } finally {
           setIsUploading(false)
         }
@@ -305,10 +295,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
           fileType: doc.file_type
         })
       } else {
-        addToast('error', 'File not found')
+        console.error('File not found')
       }
     } catch (err) {
-      addToast('error', 'Failed to load preview')
+      console.error('Failed to load preview:', err)
     }
   }
 
@@ -316,10 +306,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     try {
       const result = await window.api.documents.openExternal(doc.id)
       if (result && result !== '') {
-        addToast('error', `Failed to open: ${result}`)
+        console.error(`Failed to open: ${result}`)
       }
     } catch (err) {
-      addToast('error', 'Failed to open document')
+      console.error('Failed to open document:', err)
     }
   }
 
@@ -343,9 +333,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       setDocuments(prev =>
         prev.map(d => d.id === renaming.documentId ? { ...d, name: renaming.name.trim() } : d)
       )
-      addToast('success', 'Document renamed')
     } catch (err) {
-      addToast('error', 'Failed to rename document')
+      console.error('Failed to rename document:', err)
     }
     setRenaming({ documentId: null, name: '' })
   }
