@@ -25,6 +25,7 @@ export interface Task {
   created_at: string
   updated_at: string
   completed_at: string | null
+  deleted_at: string | null
 }
 
 export interface ActivityLogEntry {
@@ -109,10 +110,12 @@ declare global {
       tasks: {
         getByProject: (projectId: string | null) => Promise<Task[]>
         getInbox: () => Promise<Task[]>
+        getDeleted: (projectId: string) => Promise<Task[]>
         getById: (id: string) => Promise<Task | null>
-        create: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at'>) => Promise<Task>
+        create: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at' | 'deleted_at'>) => Promise<Task>
         update: (id: string, updates: Partial<Task>) => Promise<Task>
         delete: (id: string) => Promise<void>
+        restore: (id: string) => Promise<Task>
         reorder: (taskId: string, newOrder: number) => Promise<void>
       }
       activity: {

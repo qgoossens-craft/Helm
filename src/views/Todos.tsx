@@ -179,6 +179,21 @@ interface TodoItemProps {
 
 function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
+
+  const handleToggle = () => {
+    if (!todo.completed) {
+      // Completing: show animation first
+      setIsCompleting(true)
+      setTimeout(() => {
+        onToggle()
+        setIsCompleting(false)
+      }, 500)
+    } else {
+      // Uncompleting: just toggle immediately
+      onToggle()
+    }
+  }
 
   const formatDueDate = (dateStr: string | null): string => {
     if (!dateStr) return ''
@@ -215,23 +230,24 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
           : isOverdue
           ? 'border-helm-error/50'
           : 'border-helm-border'
-      }`}
+      } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
       {/* Checkbox */}
       <button
-        onClick={onToggle}
+        onClick={handleToggle}
+        disabled={isCompleting}
         className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-          todo.completed
+          todo.completed || isCompleting
             ? 'bg-helm-success border-helm-success text-white'
             : 'border-helm-border hover:border-helm-primary'
         }`}
       >
-        {todo.completed && <Check size={14} />}
+        {(todo.completed || isCompleting) && <Check size={14} className={isCompleting ? 'animate-check-pop' : ''} />}
       </button>
 
       {/* Title */}
       <div className="flex-1 min-w-0">
-        <p className={`text-helm-text truncate ${todo.completed ? 'line-through text-helm-text-muted' : ''}`}>
+        <p className={`text-helm-text truncate ${todo.completed || isCompleting ? 'line-through text-helm-text-muted' : ''}`}>
           {todo.title}
         </p>
       </div>
@@ -240,13 +256,14 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
       <div className="relative">
         <button
           onClick={() => setShowDatePicker(!showDatePicker)}
+          disabled={isCompleting}
           className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
             todo.due_date
-              ? isOverdue
+              ? isOverdue && !isCompleting
                 ? 'text-helm-error bg-helm-error/10'
                 : 'text-helm-text-muted bg-helm-bg'
               : 'text-helm-text-muted opacity-0 group-hover:opacity-100 hover:bg-helm-bg'
-          }`}
+          } ${isCompleting ? 'opacity-0' : ''}`}
         >
           <Calendar size={12} />
           {todo.due_date ? formatDueDate(todo.due_date) : 'Set date'}
@@ -281,7 +298,7 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
       {/* Delete button */}
       <button
         onClick={onDelete}
-        className="p-2 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
+        className={`p-2 text-helm-text-muted hover:text-helm-error transition-all ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
         title="Delete"
       >
         <Trash2 size={16} />

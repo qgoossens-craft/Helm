@@ -170,31 +170,48 @@ interface InboxItemProps {
 }
 
 function InboxItem({ title, completed, createdAt, onToggle, onMove, onDelete }: InboxItemProps) {
+  const [isCompleting, setIsCompleting] = useState(false)
+
+  const handleToggle = () => {
+    if (!completed) {
+      // Completing: show animation first
+      setIsCompleting(true)
+      setTimeout(() => {
+        onToggle()
+        setIsCompleting(false)
+      }, 500)
+    } else {
+      // Uncompleting: just toggle immediately
+      onToggle()
+    }
+  }
+
   return (
     <div
       className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up ${
         completed
           ? 'border-helm-border/50 opacity-60'
           : 'border-helm-border'
-      }`}
+      } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
       <button
-        onClick={onToggle}
+        onClick={handleToggle}
+        disabled={isCompleting}
         className={`w-5 h-5 rounded border shrink-0 flex items-center justify-center transition-colors ${
-          completed
+          completed || isCompleting
             ? 'bg-helm-success border-helm-success text-white'
             : 'border-helm-border hover:border-helm-primary'
         }`}
         title={completed ? 'Mark as incomplete' : 'Mark as complete'}
       >
-        {completed && <Check size={14} />}
+        {(completed || isCompleting) && <Check size={14} className={isCompleting ? 'animate-check-pop' : ''} />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={`truncate ${completed ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{title}</p>
+        <p className={`truncate ${completed || isCompleting ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{title}</p>
         <p className="text-xs text-helm-text-muted">{createdAt}</p>
       </div>
-      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        {!completed && (
+      <div className={`flex gap-2 transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+        {!completed && !isCompleting && (
           <button
             onClick={onMove}
             className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"

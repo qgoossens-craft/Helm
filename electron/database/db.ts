@@ -44,6 +44,15 @@ function runMigrations(db: Database.Database): void {
     console.log('Migration: Added icon column to projects')
   }
 
+  // Migration: Add deleted_at column to tasks table for soft delete
+  const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>
+  const taskColumns = tasksInfo.map(col => col.name)
+
+  if (!taskColumns.includes('deleted_at')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN deleted_at TEXT DEFAULT NULL`)
+    console.log('Migration: Added deleted_at column to tasks')
+  }
+
   // Check if documents table exists and needs migration
   const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
   const columnNames = tableInfo.map(col => col.name)
@@ -173,6 +182,7 @@ interface Task {
   created_at: string
   updated_at: string
   completed_at: string | null
+  deleted_at: string | null
 }
 
 interface ActivityLogEntry {
@@ -343,6 +353,7 @@ export const db = {
       const stmt = getDb().prepare(`
         SELECT * FROM tasks
         WHERE project_id ${projectId === null ? 'IS NULL' : '= ?'}
+          AND deleted_at IS NULL
         ORDER BY "order" ASC, created_at ASC
       `)
       return (projectId === null ? stmt.all() : stmt.all(projectId)) as Task[]
@@ -352,9 +363,21 @@ export const db = {
       const stmt = getDb().prepare(`
         SELECT * FROM tasks
         WHERE project_id IS NULL
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
       `)
       return stmt.all() as Task[]
+    },
+
+    getDeleted(projectId: string): Task[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE project_id = ?
+          AND deleted_at IS NOT NULL
+        ORDER BY deleted_at DESC
+        LIMIT 10
+      `)
+      return stmt.all(projectId) as Task[]
     },
 
     getById(id: string): Task | null {
@@ -449,6 +472,18 @@ export const db = {
     },
 
     delete(id: string): void {
+      // Soft delete - set deleted_at timestamp
+      const stmt = getDb().prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?')
+      stmt.run(now(), id)
+    },
+
+    restore(id: string): Task {
+      const stmt = getDb().prepare('UPDATE tasks SET deleted_at = NULL WHERE id = ?')
+      stmt.run(id)
+      return this.getById(id)!
+    },
+
+    permanentDelete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM tasks WHERE id = ?')
       stmt.run(id)
     },

@@ -4,15 +4,18 @@ import type { Task } from '../types/global'
 interface TasksState {
   tasks: Task[]
   inboxTasks: Task[]
+  deletedTasks: Task[]
   isLoading: boolean
   error: string | null
 
   // Actions
   fetchTasksByProject: (projectId: string | null) => Promise<void>
   fetchInbox: () => Promise<void>
-  createTask: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at'>) => Promise<Task>
+  fetchDeletedTasks: (projectId: string) => Promise<void>
+  createTask: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at' | 'deleted_at'>) => Promise<Task>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
+  restoreTask: (id: string) => Promise<void>
   reorderTask: (taskId: string, newOrder: number) => Promise<void>
   moveToProject: (taskId: string, projectId: string) => Promise<void>
   getTaskById: (id: string) => Task | undefined
@@ -21,11 +24,12 @@ interface TasksState {
 export const useTasksStore = create<TasksState>((set, get) => ({
   tasks: [],
   inboxTasks: [],
+  deletedTasks: [],
   isLoading: false,
   error: null,
 
   fetchTasksByProject: async (projectId) => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, deletedTasks: [] })
     try {
       const fetchedTasks = await window.api.tasks.getByProject(projectId)
       set((state) => {
@@ -45,6 +49,15 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       set({ inboxTasks, isLoading: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  fetchDeletedTasks: async (projectId) => {
+    try {
+      const deletedTasks = await window.api.tasks.getDeleted(projectId)
+      set({ deletedTasks })
+    } catch (error) {
+      console.error('Failed to fetch deleted tasks:', error)
     }
   },
 
@@ -102,10 +115,33 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   deleteTask: async (id) => {
     set({ error: null })
     try {
+      // Get the task before deleting so we can add it to deletedTasks
+      const state = get()
+      const taskToDelete = state.tasks.find((t) => t.id === id)
+
       await window.api.tasks.delete(id)
+
       set((state) => ({
         tasks: state.tasks.filter((t) => t.id !== id),
-        inboxTasks: state.inboxTasks.filter((t) => t.id !== id)
+        inboxTasks: state.inboxTasks.filter((t) => t.id !== id),
+        // Add to deletedTasks if it was a project task (keeps max 10, newest first)
+        deletedTasks: taskToDelete?.project_id
+          ? [{ ...taskToDelete, deleted_at: new Date().toISOString() }, ...state.deletedTasks].slice(0, 10)
+          : state.deletedTasks
+      }))
+    } catch (error) {
+      set({ error: (error as Error).message })
+      throw error
+    }
+  },
+
+  restoreTask: async (id) => {
+    set({ error: null })
+    try {
+      const task = await window.api.tasks.restore(id)
+      set((state) => ({
+        tasks: [...state.tasks, task],
+        deletedTasks: state.deletedTasks.filter((t) => t.id !== id)
       }))
     } catch (error) {
       set({ error: (error as Error).message })

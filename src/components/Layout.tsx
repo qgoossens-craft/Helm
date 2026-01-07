@@ -76,10 +76,15 @@ export function Layout() {
       navigate('/focus')
     })
 
+    const unsubGlobalCapture = window.api.onShortcut('shortcut:global-capture', () => {
+      navigate('/inbox')
+    })
+
     return () => {
       unsubCopilot()
       unsubCapture()
       unsubFocus()
+      unsubGlobalCapture()
     }
   }, [navigate, openCopilot])
 
@@ -146,7 +151,13 @@ export function Layout() {
 
         {/* Bottom section */}
         <div className="p-2 border-t border-helm-border">
-          <NavItem to="/settings" icon={<Settings size={18} />} label="Settings" />
+          <NavLink
+            to="/settings"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
+          >
+            <Settings size={16} />
+            <span>Settings</span>
+          </NavLink>
         </div>
       </aside>
 

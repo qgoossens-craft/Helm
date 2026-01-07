@@ -50,6 +50,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const { addToast } = useUIStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
+  const descriptionRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     setTitle(task.title)
@@ -61,6 +62,13 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       titleRef.current.style.height = titleRef.current.scrollHeight + 'px'
     }
   }, [task])
+
+  // Auto-focus description field for new tasks (those without a description)
+  useEffect(() => {
+    if (!task.description && descriptionRef.current) {
+      descriptionRef.current.focus()
+    }
+  }, [task.id])
 
   useEffect(() => {
     const filtered = tasks.filter((t) => t.parent_task_id === task.id)
@@ -443,6 +451,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             Description
           </label>
           <textarea
+            ref={descriptionRef}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={handleSave}

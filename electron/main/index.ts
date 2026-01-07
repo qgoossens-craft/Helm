@@ -50,6 +50,16 @@ function registerGlobalShortcuts(): void {
   globalShortcut.register('CommandOrControl+Shift+F', () => {
     mainWindow?.webContents.send('shortcut:focus-mode')
   })
+
+  // Cmd+Enter - Global quick capture (works even when app is not focused)
+  globalShortcut.register('CommandOrControl+Return', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
+    mainWindow?.webContents.send('shortcut:global-capture')
+  })
 }
 
 // Register IPC handlers for database operations
@@ -68,6 +78,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:tasks:create', (_, task) => db.tasks.create(task))
   ipcMain.handle('db:tasks:update', (_, id: string, updates) => db.tasks.update(id, updates))
   ipcMain.handle('db:tasks:delete', (_, id: string) => db.tasks.delete(id))
+  ipcMain.handle('db:tasks:getDeleted', (_, projectId: string) => db.tasks.getDeleted(projectId))
+  ipcMain.handle('db:tasks:restore', (_, id: string) => db.tasks.restore(id))
   ipcMain.handle('db:tasks:reorder', (_, taskId: string, newOrder: number) => db.tasks.reorder(taskId, newOrder))
 
   // Activity Log

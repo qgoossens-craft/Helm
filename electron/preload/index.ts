@@ -113,12 +113,15 @@ contextBridge.exposeInMainWorld('api', {
     getByProject: (projectId: string | null): Promise<Task[]> =>
       ipcRenderer.invoke('db:tasks:getByProject', projectId),
     getInbox: (): Promise<Task[]> => ipcRenderer.invoke('db:tasks:getInbox'),
+    getDeleted: (projectId: string): Promise<Task[]> =>
+      ipcRenderer.invoke('db:tasks:getDeleted', projectId),
     getById: (id: string): Promise<Task | null> => ipcRenderer.invoke('db:tasks:getById', id),
     create: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at'>): Promise<Task> =>
       ipcRenderer.invoke('db:tasks:create', task),
     update: (id: string, updates: Partial<Task>): Promise<Task> =>
       ipcRenderer.invoke('db:tasks:update', id, updates),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('db:tasks:delete', id),
+    restore: (id: string): Promise<Task> => ipcRenderer.invoke('db:tasks:restore', id),
     reorder: (taskId: string, newOrder: number): Promise<void> =>
       ipcRenderer.invoke('db:tasks:reorder', taskId, newOrder)
   },
@@ -204,7 +207,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Event listeners for shortcuts
   onShortcut: (channel: string, callback: () => void) => {
-    const validChannels = ['shortcut:copilot', 'shortcut:quick-capture', 'shortcut:focus-mode']
+    const validChannels = ['shortcut:copilot', 'shortcut:quick-capture', 'shortcut:focus-mode', 'shortcut:global-capture']
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, callback)
       return () => ipcRenderer.removeListener(channel, callback)

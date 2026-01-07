@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, MoreHorizontal, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
@@ -9,7 +9,7 @@ import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
 import type { Task, Document } from '../types/global'
 
 type ViewMode = 'list' | 'kanban'
-type TaskFilter = 'all' | 'active' | 'todo' | 'in_progress' | 'done'
+type TaskFilter = 'all' | 'active' | 'todo' | 'in_progress' | 'done' | 'deleted'
 
 export function Project() {
   const { id } = useParams<{ id: string }>()
@@ -33,7 +33,7 @@ export function Project() {
 
   const { projects, fetchProjects, updateProject, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
-  const { tasks, fetchTasksByProject, createTask, updateTask, deleteTask } = useTasksStore()
+  const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask } = useTasksStore()
   const { addToast } = useUIStore()
 
   useEffect(() => {
@@ -45,6 +45,13 @@ export function Project() {
       fetchTasksByProject(id)
     }
   }, [id, fetchTasksByProject])
+
+  // Fetch deleted tasks when filter is selected
+  useEffect(() => {
+    if (id && taskFilter === 'deleted') {
+      fetchDeletedTasks(id)
+    }
+  }, [id, taskFilter, fetchDeletedTasks])
 
   // Auto-select task from URL query param
   useEffect(() => {
@@ -78,10 +85,18 @@ export function Project() {
 
   // Filter tasks based on selected filter
   const filteredTasks = useMemo(() => {
-    if (taskFilter === 'all') return projectTasks
+    if (taskFilter === 'deleted') return deletedTasks
+    if (taskFilter === 'all') {
+      // Sort: active tasks first (todo, in_progress), then done
+      return [...projectTasks].sort((a, b) => {
+        if (a.status === 'done' && b.status !== 'done') return 1
+        if (a.status !== 'done' && b.status === 'done') return -1
+        return 0
+      })
+    }
     if (taskFilter === 'active') return projectTasks.filter((t) => t.status === 'todo' || t.status === 'in_progress')
     return projectTasks.filter((t) => t.status === taskFilter)
-  }, [projectTasks, taskFilter])
+  }, [projectTasks, deletedTasks, taskFilter])
 
   // Count tasks by status for filter badges
   const taskCounts = useMemo(() => ({
@@ -89,8 +104,9 @@ export function Project() {
     active: projectTasks.filter((t) => t.status === 'todo' || t.status === 'in_progress').length,
     todo: projectTasks.filter((t) => t.status === 'todo').length,
     in_progress: projectTasks.filter((t) => t.status === 'in_progress').length,
-    done: projectTasks.filter((t) => t.status === 'done').length
-  }), [projectTasks])
+    done: projectTasks.filter((t) => t.status === 'done').length,
+    deleted: deletedTasks.length
+  }), [projectTasks, deletedTasks])
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,6 +143,15 @@ export function Project() {
     try {
       await deleteTask(taskId)
       addToast('success', 'Task deleted')
+    } catch (err) {
+      addToast('error', (err as Error).message)
+    }
+  }
+
+  const handleRestoreTask = async (taskId: string) => {
+    try {
+      await restoreTask(taskId)
+      addToast('success', 'Task restored')
     } catch (err) {
       addToast('error', (err as Error).message)
     }
@@ -323,7 +348,8 @@ export function Project() {
             { value: 'active', label: 'Active' },
             { value: 'todo', label: 'To Do' },
             { value: 'in_progress', label: 'In Progress' },
-            { value: 'done', label: 'Done' }
+            { value: 'done', label: 'Done' },
+            { value: 'deleted', label: 'Deleted' }
           ] as const).map((filter) => (
             <button
               key={filter.value}
@@ -388,7 +414,9 @@ export function Project() {
             tasks={filteredTasks}
             onToggle={handleToggleStatus}
             onDelete={handleDeleteTask}
+            onRestore={handleRestoreTask}
             onSelect={setSelectedTask}
+            isDeleted={taskFilter === 'deleted'}
           />
         ) : (
           <KanbanView
@@ -413,21 +441,6 @@ export function Project() {
       {!selectedTask && (
       <aside className="w-80 flex-shrink-0 p-6 overflow-auto">
         <div className="space-y-6">
-          {/* Status */}
-          <div>
-            <h3 className="text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2">
-              Status
-            </h3>
-            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-              project.status === 'active' ? 'bg-helm-success text-white' :
-              project.status === 'paused' ? 'bg-yellow-500 text-white' :
-              project.status === 'completed' ? 'bg-helm-primary text-white' :
-              'bg-helm-surface-elevated text-helm-text-muted'
-            }`}>
-              {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-            </span>
-          </div>
-
           {/* Appearance (Color & Icon) */}
           <div>
             <button
@@ -717,15 +730,17 @@ interface ListViewProps {
   tasks: Task[]
   onToggle: (task: Task) => void
   onDelete: (id: string) => void
+  onRestore: (id: string) => void
   onSelect: (task: Task) => void
+  isDeleted: boolean
 }
 
-function ListView({ tasks, onToggle, onDelete, onSelect }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, isDeleted }: ListViewProps) {
   if (tasks.length === 0) {
     return (
       <div className="flex-1 space-y-2">
         <div className="text-center py-12 text-helm-text-muted">
-          <p>No tasks yet. Add your first task above.</p>
+          <p>{isDeleted ? 'No deleted tasks.' : 'No tasks yet. Add your first task above.'}</p>
         </div>
       </div>
     )
@@ -734,7 +749,7 @@ function ListView({ tasks, onToggle, onDelete, onSelect }: ListViewProps) {
   return (
     <div className="flex-1 space-y-2 overflow-y-auto">
       {tasks.map((task) => (
-        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onSelect={onSelect} />
+        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} isDeleted={isDeleted} />
       ))}
     </div>
   )
@@ -744,70 +759,82 @@ interface TaskRowProps {
   task: Task
   onToggle: (task: Task) => void
   onDelete: (id: string) => void
+  onRestore: (id: string) => void
   onSelect: (task: Task) => void
+  isDeleted: boolean
 }
 
-function TaskRow({ task, onToggle, onDelete, onSelect }: TaskRowProps) {
-  const [showMenu, setShowMenu] = useState(false)
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, isDeleted }: TaskRowProps) {
+  const [isCompleting, setIsCompleting] = useState(false)
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (task.status !== 'done') {
+      // Completing: show animation first
+      setIsCompleting(true)
+      setTimeout(() => {
+        onToggle(task)
+        setIsCompleting(false)
+      }, 500)
+    } else {
+      // Uncompleting: just toggle immediately
+      onToggle(task)
+    }
+  }
 
   return (
     <div
-      onClick={() => onSelect(task)}
-      className="flex items-center gap-3 p-3 bg-helm-surface border border-helm-border rounded-lg group animate-slide-up cursor-pointer hover:border-helm-primary transition-colors"
+      onClick={() => !isDeleted && !isCompleting && onSelect(task)}
+      className={`flex items-center gap-3 p-3 bg-helm-surface border border-helm-border rounded-lg group animate-slide-up transition-colors ${
+        isDeleted ? 'opacity-60' : 'cursor-pointer hover:border-helm-primary'
+      } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggle(task)
-        }}
-        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-          task.status === 'done'
-            ? 'bg-helm-primary border-helm-primary text-white'
-            : 'border-helm-border hover:border-helm-primary'
-        }`}
-      >
-        {task.status === 'done' && <Check size={12} />}
-      </button>
-      <span className={`flex-1 text-sm ${task.status === 'done' ? 'text-helm-text-muted line-through' : 'text-helm-text'}`}>
+      {!isDeleted && (
+        <button
+          onClick={handleToggle}
+          disabled={isCompleting}
+          className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+            task.status === 'done' || isCompleting
+              ? 'bg-helm-success border-helm-success text-white'
+              : 'border-helm-border hover:border-helm-primary'
+          }`}
+        >
+          {(task.status === 'done' || isCompleting) && (
+            <Check size={12} className={isCompleting ? 'animate-check-pop' : ''} />
+          )}
+        </button>
+      )}
+      <span className={`flex-1 text-sm ${task.status === 'done' || isDeleted || isCompleting ? 'text-helm-text-muted line-through' : 'text-helm-text'}`}>
         {task.title}
       </span>
-      {task.status === 'in_progress' && (
+      {!isDeleted && task.status === 'in_progress' && !isCompleting && (
         <span className="text-xs px-2 py-0.5 rounded bg-helm-primary/20 text-helm-primary">
           In Progress
         </span>
       )}
-      <div className="relative">
+      {isDeleted ? (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setShowMenu(!showMenu)
+            onRestore(task.id)
           }}
-          className="p-1.5 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded opacity-0 group-hover:opacity-100 transition-all"
+          className="p-1.5 text-helm-text-muted hover:text-helm-success opacity-0 group-hover:opacity-100 transition-all"
+          title="Restore"
         >
-          <MoreHorizontal size={16} />
+          <RotateCcw size={16} />
         </button>
-        {showMenu && (
-          <>
-            <div className="fixed inset-0" onClick={(e) => {
-              e.stopPropagation()
-              setShowMenu(false)
-            }} />
-            <div className="absolute right-0 top-8 bg-helm-surface border border-helm-border rounded-lg shadow-lg py-1 z-10 min-w-32 animate-scale-in">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(task.id)
-                  setShowMenu(false)
-                }}
-                className="w-full px-3 py-2 text-left text-sm text-helm-error hover:bg-helm-surface-elevated flex items-center gap-2"
-              >
-                <Trash2 size={14} />
-                Delete
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      ) : (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(task.id)
+          }}
+          className="p-1.5 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
+          title="Delete"
+        >
+          <Trash2 size={16} />
+        </button>
+      )}
     </div>
   )
 }
