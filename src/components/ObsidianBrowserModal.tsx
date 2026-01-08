@@ -19,6 +19,7 @@ export function ObsidianBrowserModal() {
     if (isObsidianBrowserOpen && settings.obsidian_vault_path) {
       loadFiles()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isObsidianBrowserOpen, settings.obsidian_vault_path])
 
   // Reset state when modal closes

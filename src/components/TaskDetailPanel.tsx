@@ -34,7 +34,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const [isAddingSubtask, setIsAddingSubtask] = useState(false)
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [showDocuments, setShowDocuments] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
+  const [, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [preview, setPreview] = useState<PreviewState>({
     isOpen: false,
@@ -47,7 +47,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     name: ''
   })
 
-  const { tasks, updateTask, createTask, deleteTask, fetchTasksByProject } = useTasksStore()
+  const { tasks, updateTask, createTask, deleteTask } = useTasksStore()
   const { openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
   const { settings } = useSettingsStore()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -106,6 +106,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, description, status])
 
   useEffect(() => {
@@ -122,6 +123,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, description, status, onClose, preview.isOpen])
 
   const handleSave = async () => {
@@ -244,48 +246,6 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
 
     // Start polling after a short delay
     setTimeout(checkStatus, 500)
-  }
-
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault()
-        const file = item.getAsFile()
-        if (!file) continue
-
-        setIsUploading(true)
-        try {
-          // Convert file to base64
-          const buffer = await file.arrayBuffer()
-          const base64 = btoa(
-            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-          )
-
-          const result = await window.api.documents.uploadFromClipboard(
-            base64,
-            file.type,
-            task.id,
-            projectId
-          )
-
-          if (result.success) {
-            const docs = await window.api.documents.getByTask(task.id)
-            setDocuments(docs)
-            pollDocumentStatus(result.documentId)
-          } else {
-            console.error('Failed to upload screenshot:', result.error)
-          }
-        } catch (err) {
-          console.error('Failed to upload screenshot:', err)
-        } finally {
-          setIsUploading(false)
-        }
-        break
-      }
-    }
   }
 
   const canPreview = (fileType: string) => {

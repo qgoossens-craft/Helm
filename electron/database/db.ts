@@ -132,7 +132,7 @@ function runMigrations(db: Database.Database): void {
 
       console.log('Migration: quick_todos table updated to support tweaks list')
     }
-  } catch (error) {
+  } catch {
     // Table might not exist yet, which is fine - it will be created with the new schema
     console.log('Migration: quick_todos table check skipped (table may not exist yet)')
   }

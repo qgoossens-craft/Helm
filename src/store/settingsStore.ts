@@ -39,7 +39,7 @@ const defaultSettings: Settings = {
   obsidian_vault_path: ''
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>((set) => ({
   settings: defaultSettings,
   isLoading: false,
   error: null,

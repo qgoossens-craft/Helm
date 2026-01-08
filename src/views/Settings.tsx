@@ -3,7 +3,7 @@ import { useSettingsStore, useProjectsStore } from '../store'
 import { Check, AlertCircle, ChevronDown, ChevronRight, Home, Inbox, Focus, ListTodo, FolderOpen } from 'lucide-react'
 import type { ThemeId } from '../lib/themes'
 import { themes } from '../lib/themes'
-import { PROJECT_COLORS, PROJECT_ICONS } from '../components/Layout'
+import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
 
 // Navigation items for customization
 const NAV_ITEMS = [
@@ -39,7 +39,7 @@ export function Settings() {
       await saveAllSettings({ name, openai_api_key: apiKey, theme: settings.theme })
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
-    } catch (error) {
+    } catch {
       setSaveStatus('error')
     }
   }
@@ -66,7 +66,7 @@ export function Settings() {
       } else {
         setTestStatus('error')
       }
-    } catch (error) {
+    } catch {
       setTestStatus('error')
     }
     setTimeout(() => setTestStatus('idle'), 3000)

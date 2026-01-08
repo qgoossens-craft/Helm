@@ -54,6 +54,7 @@ export function Focus() {
     }
 
     loadNextTask()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchProjects, fetchTasksByProject])
 
   const handleDone = async () => {

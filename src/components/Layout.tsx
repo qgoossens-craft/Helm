@@ -1,45 +1,11 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import {
-  Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo,
-  Briefcase, Rocket, Target, Star, Heart, Code, Book, Music, Camera,
-  Palette, Gamepad2, GraduationCap, Plane, ShoppingBag, type LucideIcon
-} from 'lucide-react'
+import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
 import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
-import { QuickSwitcher, useDoubleTapCmd } from './QuickSwitcher'
+import { QuickSwitcher } from './QuickSwitcher'
+import { useDoubleTapCmd } from '../hooks/useDoubleTapCmd'
 import { ObsidianBrowserModal } from './ObsidianBrowserModal'
-
-// Project color palette
-export const PROJECT_COLORS: Record<string, string> = {
-  red: '#ef4444',
-  orange: '#f97316',
-  amber: '#f59e0b',
-  green: '#22c55e',
-  teal: '#14b8a6',
-  blue: '#3b82f6',
-  purple: '#8b5cf6',
-  pink: '#ec4899',
-}
-
-// Project icon map
-export const PROJECT_ICONS: Record<string, LucideIcon> = {
-  folder: FolderKanban,
-  briefcase: Briefcase,
-  rocket: Rocket,
-  target: Target,
-  star: Star,
-  heart: Heart,
-  code: Code,
-  book: Book,
-  music: Music,
-  camera: Camera,
-  palette: Palette,
-  gamepad: Gamepad2,
-  'graduation-cap': GraduationCap,
-  home: Home,
-  plane: Plane,
-  'shopping-bag': ShoppingBag,
-}
+import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
 
 export function Layout() {
   const navigate = useNavigate()
