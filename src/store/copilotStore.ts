@@ -1,17 +1,23 @@
 import { create } from 'zustand'
 import type { ConversationMessage } from '../types/global'
 
+interface CopilotContext {
+  projectId?: string
+  taskId?: string
+  quickTodoId?: string
+}
+
 interface CopilotState {
   messages: ConversationMessage[]
-  currentProjectId: string | null
+  currentContext: CopilotContext | null
   addMessage: (message: ConversationMessage) => void
   clearMessages: () => void
-  setProjectContext: (projectId: string | null) => void
+  setContext: (context: CopilotContext | null) => void
 }
 
 export const useCopilotStore = create<CopilotState>((set, get) => ({
   messages: [],
-  currentProjectId: null,
+  currentContext: null,
 
   addMessage: (message) =>
     set((state) => ({
@@ -20,12 +26,16 @@ export const useCopilotStore = create<CopilotState>((set, get) => ({
 
   clearMessages: () => set({ messages: [] }),
 
-  setProjectContext: (projectId) => {
-    const { currentProjectId, clearMessages } = get()
-    // If project changes, clear conversation
-    if (projectId !== currentProjectId) {
+  setContext: (context) => {
+    const { currentContext, clearMessages } = get()
+    // If context changes significantly, clear conversation
+    const contextChanged =
+      context?.projectId !== currentContext?.projectId ||
+      context?.taskId !== currentContext?.taskId ||
+      context?.quickTodoId !== currentContext?.quickTodoId
+    if (contextChanged) {
       clearMessages()
     }
-    set({ currentProjectId: projectId })
+    set({ currentContext: context })
   }
 }))

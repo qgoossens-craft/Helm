@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, Inbox, FolderKanban, Focus, Settings, Sparkles, Plus, ListTodo } from 'lucide-react'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Home, Inbox, FolderKanban, Focus, Settings, Plus, ListTodo, BarChart3 } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
 import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
 import { QuickSwitcher } from './QuickSwitcher'
@@ -10,7 +10,6 @@ import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
 
 export function Layout() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { projects, fetchProjects } = useProjectsStore()
   const { openCopilot, openKickoffWizard, openQuickSwitcher } = useUIStore()
   const { settings, fetchSettings } = useSettingsStore()
@@ -27,8 +26,6 @@ export function Layout() {
   }, [openQuickSwitcher])
   useDoubleTapCmd(handleDoubleTapCmd)
 
-  // Check if we're on a project page (for right panel border)
-  const isProjectPage = location.pathname.startsWith('/project/')
 
   // Fetch projects and settings on mount
   useEffect(() => {
@@ -84,6 +81,7 @@ export function Layout() {
           <NavItem to="/inbox" icon={<Inbox size={18} />} label="Inbox" iconColor={getNavColor('inbox')} />
           <NavItem to="/focus" icon={<Focus size={18} />} label="Focus" iconColor={getNavColor('focus')} />
           <NavItem to="/todos" icon={<ListTodo size={18} />} label="Todos" iconColor={getNavColor('todos')} />
+          <NavItem to="/stats" icon={<BarChart3 size={18} />} label="Stats" iconColor={getNavColor('stats')} />
 
           <div className="pt-4 pb-2 px-3 flex items-center justify-between">
             <span className="text-xs font-medium text-helm-text-muted uppercase tracking-wider">
@@ -158,20 +156,6 @@ export function Layout() {
         {/* Drag region overlay at top */}
         <div className="absolute top-0 left-0 right-0 h-10 drag-region z-10" />
 
-        {/* Jeeves button - positioned at top right (hidden on project pages where it's in the right panel) */}
-        {!isProjectPage && (
-          <div className="absolute top-2 right-2 z-20">
-            <button
-              className="no-drag flex items-center gap-2 px-3 py-1.5 rounded-lg bg-helm-surface/80 hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors backdrop-blur-sm"
-              onClick={() => openCopilot()}
-            >
-              <Sparkles size={16} />
-              <span>Jeeves</span>
-              <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">⌘</kbd>
-              <kbd className="text-xs text-helm-text-muted px-1.5 py-0.5 rounded border border-helm-border">K</kbd>
-            </button>
-          </div>
-        )}
 
         {/* Page content */}
         <div className="flex-1 overflow-hidden relative z-20">

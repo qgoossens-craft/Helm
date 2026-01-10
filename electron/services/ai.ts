@@ -34,6 +34,23 @@ interface AIContext {
     status: string
     context: string
   }
+  currentTask?: {
+    id: string
+    title: string
+    description: string | null
+    status: string
+    priority: string | null
+    dueDate: string | null
+  }
+  currentQuickTodo?: {
+    id: string
+    title: string
+    description: string | null
+    list: string
+    priority: string | null
+    dueDate: string | null
+    completed: boolean
+  }
   projectTasks?: {
     total: number
     completed: number
@@ -51,6 +68,16 @@ interface AIContext {
     content: string
     relevance: number
   }>
+  attachedDocuments?: Array<{
+    name: string
+    extractedText: string | null
+  }>
+  attachedSources?: Array<{
+    title: string
+    url: string
+    description: string | null
+    sourceType: string
+  }>
   recentConversations?: Array<{
     userMessage: string
     aiResponse: string
@@ -58,7 +85,7 @@ interface AIContext {
 }
 
 // Build context for AI prompts
-export function buildContext(projectId?: string): AIContext {
+export function buildContext(projectId?: string, taskId?: string, quickTodoId?: string): AIContext {
   const settings = db.settings.getAll()
   const now = new Date()
 
@@ -70,6 +97,85 @@ export function buildContext(projectId?: string): AIContext {
     }
   }
 
+  // Quick Todo context (takes priority over project/task)
+  if (quickTodoId) {
+    const quickTodo = db.quickTodos.getById(quickTodoId)
+    if (quickTodo) {
+      context.currentQuickTodo = {
+        id: quickTodo.id,
+        title: quickTodo.title,
+        description: quickTodo.description,
+        list: quickTodo.list,
+        priority: quickTodo.priority,
+        dueDate: quickTodo.due_date,
+        completed: quickTodo.completed
+      }
+
+      // Get documents attached to this quick todo
+      const docs = db.documents.getByQuickTodo(quickTodoId)
+      if (docs.length > 0) {
+        context.attachedDocuments = docs
+          .filter(d => d.processing_status === 'completed')
+          .slice(0, 5)
+          .map(d => ({
+            name: d.name,
+            extractedText: d.extracted_text ? d.extracted_text.substring(0, 2000) : null
+          }))
+      }
+
+      // Get sources attached to this quick todo
+      const sources = db.sources.getByQuickTodo(quickTodoId)
+      if (sources.length > 0) {
+        context.attachedSources = sources.slice(0, 10).map(s => ({
+          title: s.title,
+          url: s.url,
+          description: s.description,
+          sourceType: s.source_type
+        }))
+      }
+    }
+    return context
+  }
+
+  // Task context
+  if (taskId) {
+    const task = db.tasks.getById(taskId)
+    if (task) {
+      context.currentTask = {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.due_date
+      }
+
+      // Get documents attached to this task
+      const taskDocs = db.documents.getByTask(taskId)
+      if (taskDocs.length > 0) {
+        context.attachedDocuments = taskDocs
+          .filter(d => d.processing_status === 'completed')
+          .slice(0, 5)
+          .map(d => ({
+            name: d.name,
+            extractedText: d.extracted_text ? d.extracted_text.substring(0, 2000) : null
+          }))
+      }
+
+      // Get sources attached to this task
+      const taskSources = db.sources.getByTask(taskId)
+      if (taskSources.length > 0) {
+        context.attachedSources = taskSources.slice(0, 10).map(s => ({
+          title: s.title,
+          url: s.url,
+          description: s.description,
+          sourceType: s.source_type
+        }))
+      }
+    }
+  }
+
+  // Project context
   if (projectId) {
     const project = db.projects.getById(projectId)
     if (project) {
@@ -98,6 +204,19 @@ export function buildContext(projectId?: string): AIContext {
         time: a.created_at
       }))
 
+      // If no task-specific sources, get project-level sources
+      if (!context.attachedSources || context.attachedSources.length === 0) {
+        const projectSources = db.sources.getByProject(projectId)
+        if (projectSources.length > 0) {
+          context.attachedSources = projectSources.slice(0, 10).map(s => ({
+            title: s.title,
+            url: s.url,
+            description: s.description,
+            sourceType: s.source_type
+          }))
+        }
+      }
+
       // Load recent conversations from previous sessions
       const recentConvos = db.aiConversations.getRecent(projectId, 3)
       if (recentConvos.length > 0) {
@@ -124,6 +243,30 @@ Your personality:
 - Focus on the next concrete step
 - Help break down overwhelming tasks`
 
+  // Quick Todo context (highest priority)
+  if (context.currentQuickTodo) {
+    prompt += `
+
+CURRENT QUICK TODO: "${context.currentQuickTodo.title}"
+- List: ${context.currentQuickTodo.list}
+- Status: ${context.currentQuickTodo.completed ? 'Completed' : 'Active'}
+${context.currentQuickTodo.description ? `- Description: ${context.currentQuickTodo.description}` : ''}
+${context.currentQuickTodo.priority ? `- Priority: ${context.currentQuickTodo.priority}` : ''}
+${context.currentQuickTodo.dueDate ? `- Due: ${context.currentQuickTodo.dueDate}` : ''}`
+  }
+
+  // Task context
+  if (context.currentTask) {
+    prompt += `
+
+CURRENT TASK: "${context.currentTask.title}"
+- Status: ${context.currentTask.status}
+${context.currentTask.description ? `- Description: ${context.currentTask.description}` : ''}
+${context.currentTask.priority ? `- Priority: ${context.currentTask.priority}` : ''}
+${context.currentTask.dueDate ? `- Due: ${context.currentTask.dueDate}` : ''}`
+  }
+
+  // Project context
   if (context.currentProject) {
     prompt += `
 
@@ -146,12 +289,33 @@ Current tasks:
 ${context.projectTasks.taskList.map(t => `- [${t.status}] ${t.title}`).join('\n')}`
   }
 
+  // Attached documents (task/quick todo specific)
+  if (context.attachedDocuments && context.attachedDocuments.length > 0) {
+    prompt += `
+
+ATTACHED DOCUMENTS:
+${context.attachedDocuments.map((doc, i) => {
+  const content = doc.extractedText ? doc.extractedText.substring(0, 1500) : '(No text extracted)'
+  return `[${i + 1}] "${doc.name}":
+${content}${doc.extractedText && doc.extractedText.length > 1500 ? '...' : ''}`
+}).join('\n\n')}`
+  }
+
+  // Attached sources (URLs)
+  if (context.attachedSources && context.attachedSources.length > 0) {
+    prompt += `
+
+REFERENCE SOURCES (URLs):
+${context.attachedSources.map((s, i) => `[${i + 1}] ${s.title} (${s.sourceType})
+   URL: ${s.url}
+   ${s.description ? `Description: ${s.description}` : ''}`).join('\n')}`
+  }
+
+  // RAG-retrieved documents (semantic search results)
   if (context.relevantDocuments && context.relevantDocuments.length > 0) {
     prompt += `
 
-RELEVANT DOCUMENTS:
-The following excerpts from attached documents may help answer the user's question:
-
+RELEVANT DOCUMENTS (from search):
 ${context.relevantDocuments.map((doc, i) => `[${i + 1}] From "${doc.documentName}":
 ${doc.content}
 `).join('\n')}`
@@ -172,7 +336,8 @@ Guidelines:
 - Suggest ONE clear next action when appropriate
 - If user seems stuck, offer to break things down
 - Don't be preachy about productivity - just help
-- When referencing document content, cite the document name`
+- When referencing document content, cite the document name
+- When referencing sources, mention the source title and you can suggest the user check the URL`
 
   return prompt
 }
@@ -182,6 +347,7 @@ export async function chat(
   message: string,
   projectId?: string,
   taskId?: string,
+  quickTodoId?: string,
   conversationHistory: ConversationMessage[] = []
 ): Promise<{ response: string; conversationId: string }> {
   const apiKey = db.settings.get('openai_api_key')
@@ -190,23 +356,25 @@ export async function chat(
   }
 
   const openai = new OpenAI({ apiKey })
-  const context = buildContext(projectId)
+  const context = buildContext(projectId, taskId, quickTodoId)
 
-  // Search for relevant documents using RAG
-  try {
-    const relevantDocs = await searchDocuments(message, {
-      projectId,
-      taskId,
-      limit: 3
-    })
+  // Search for relevant documents using RAG (skip if we have a quick todo - use attached docs instead)
+  if (!quickTodoId) {
+    try {
+      const relevantDocs = await searchDocuments(message, {
+        projectId,
+        taskId,
+        limit: 3
+      })
 
-    if (relevantDocs.length > 0) {
-      // Only include documents with decent relevance (similarity > 0.3)
-      context.relevantDocuments = relevantDocs.filter(doc => doc.relevance > 0.3)
+      if (relevantDocs.length > 0) {
+        // Only include documents with decent relevance (similarity > 0.3)
+        context.relevantDocuments = relevantDocs.filter(doc => doc.relevance > 0.3)
+      }
+    } catch (err) {
+      // RAG search failed, continue without document context
+      console.error('RAG search failed:', err)
     }
-  } catch (err) {
-    // RAG search failed, continue without document context
-    console.error('RAG search failed:', err)
   }
 
   const systemPrompt = buildSystemPrompt(context)

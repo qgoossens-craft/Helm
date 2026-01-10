@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore, useProjectsStore } from '../store'
-import { Check, AlertCircle, ChevronDown, ChevronRight, Home, Inbox, Focus, ListTodo, FolderOpen } from 'lucide-react'
+import { Check, AlertCircle, ChevronDown, ChevronRight, Home, Inbox, Focus, ListTodo, BarChart3, FolderOpen } from 'lucide-react'
 import type { ThemeId } from '../lib/themes'
 import { themes } from '../lib/themes'
 import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { id: 'inbox', label: 'Inbox', icon: Inbox },
   { id: 'focus', label: 'Focus', icon: Focus },
   { id: 'todos', label: 'Todos', icon: ListTodo },
+  { id: 'stats', label: 'Stats', icon: BarChart3 },
 ] as const
 
 export function Settings() {

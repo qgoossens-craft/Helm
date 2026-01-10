@@ -173,6 +173,29 @@ function runMigrations(db: Database.Database): void {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_quick_todo ON documents(quick_todo_id)`)
     console.log('Migration: Added quick_todo_id column to documents')
   }
+
+  // Migration: Create sources table if not exists
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sources (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      task_id TEXT,
+      quick_todo_id TEXT,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      favicon_url TEXT,
+      source_type TEXT NOT NULL DEFAULT 'link'
+          CHECK (source_type IN ('link', 'article', 'video', 'document')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (quick_todo_id) REFERENCES quick_todos(id) ON DELETE CASCADE
+    )
+  `)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_task ON sources(task_id)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_project ON sources(project_id)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_quick_todo ON sources(quick_todo_id)`)
 }
 
 // Initialize database
@@ -333,6 +356,55 @@ interface QuickTodo {
   completed_at: string | null
   created_at: string
   updated_at: string
+}
+
+interface Source {
+  id: string
+  project_id: string | null
+  task_id: string | null
+  quick_todo_id: string | null
+  url: string
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+  created_at: string
+}
+
+export interface CompletionStats {
+  tasks: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+  }
+  todos: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+    byList: {
+      personal: number
+      work: number
+      tweaks: number
+    }
+  }
+  projects: {
+    completed: number
+  }
+  streak: {
+    current: number
+    longest: number
+  }
+  bestDay: {
+    date: string
+    count: number
+  }
+  weeklyTrend: Array<{
+    day: string
+    tasks: number
+    todos: number
+  }>
 }
 
 // Database operations
@@ -997,6 +1069,370 @@ export const db = {
         ...r,
         completed: r.completed === 1
       } as QuickTodo
+    }
+  },
+
+  // Sources (URL links)
+  sources: {
+    create(source: Omit<Source, 'id' | 'created_at'>): Source {
+      const id = generateId()
+      const timestamp = now()
+
+      const stmt = getDb().prepare(`
+        INSERT INTO sources (id, project_id, task_id, quick_todo_id, url, title, description, favicon_url, source_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      stmt.run(
+        id,
+        source.project_id,
+        source.task_id,
+        source.quick_todo_id,
+        source.url,
+        source.title,
+        source.description,
+        source.favicon_url,
+        source.source_type || 'link',
+        timestamp
+      )
+
+      return this.getById(id)!
+    },
+
+    getById(id: string): Source | null {
+      const stmt = getDb().prepare('SELECT * FROM sources WHERE id = ?')
+      return (stmt.get(id) as Source) || null
+    },
+
+    getByTask(taskId: string): Source[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM sources
+        WHERE task_id = ?
+        ORDER BY created_at DESC
+      `)
+      return stmt.all(taskId) as Source[]
+    },
+
+    getByQuickTodo(quickTodoId: string): Source[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM sources
+        WHERE quick_todo_id = ?
+        ORDER BY created_at DESC
+      `)
+      return stmt.all(quickTodoId) as Source[]
+    },
+
+    getByProject(projectId: string): Source[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM sources
+        WHERE project_id = ?
+        ORDER BY created_at DESC
+      `)
+      return stmt.all(projectId) as Source[]
+    },
+
+    update(id: string, updates: Partial<Pick<Source, 'title' | 'description' | 'favicon_url' | 'source_type'>>): Source {
+      const current = this.getById(id)
+      if (!current) throw new Error(`Source ${id} not found`)
+
+      const fields: string[] = []
+      const values: (string | null)[] = []
+
+      if (updates.title !== undefined) {
+        fields.push('title = ?')
+        values.push(updates.title)
+      }
+      if (updates.description !== undefined) {
+        fields.push('description = ?')
+        values.push(updates.description)
+      }
+      if (updates.favicon_url !== undefined) {
+        fields.push('favicon_url = ?')
+        values.push(updates.favicon_url)
+      }
+      if (updates.source_type !== undefined) {
+        fields.push('source_type = ?')
+        values.push(updates.source_type)
+      }
+
+      if (fields.length === 0) return current
+
+      values.push(id)
+      const stmt = getDb().prepare(`UPDATE sources SET ${fields.join(', ')} WHERE id = ?`)
+      stmt.run(...values)
+
+      return this.getById(id)!
+    },
+
+    delete(id: string): void {
+      const stmt = getDb().prepare('DELETE FROM sources WHERE id = ?')
+      stmt.run(id)
+    }
+  },
+
+  // Stats queries
+  stats: {
+    getCompletionStats(): CompletionStats {
+      const database = getDb()
+
+      // Get today's date boundaries
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayStr = today.toISOString()
+      const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString()
+
+      // Get week boundaries (Monday start)
+      const weekStart = new Date(today)
+      const dayOfWeek = weekStart.getDay()
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Monday
+      weekStart.setDate(weekStart.getDate() + diff)
+      const weekStartStr = weekStart.toISOString()
+
+      // Get month boundaries
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      const monthStartStr = monthStart.toISOString()
+
+      // Tasks completed today
+      const tasksToday = database.prepare(`
+        SELECT COUNT(*) as count FROM tasks
+        WHERE status = 'done'
+        AND completed_at >= ? AND completed_at < ?
+        AND deleted_at IS NULL
+      `).get(todayStr, tomorrowStr) as { count: number }
+
+      // Tasks completed this week
+      const tasksWeek = database.prepare(`
+        SELECT COUNT(*) as count FROM tasks
+        WHERE status = 'done'
+        AND completed_at >= ?
+        AND deleted_at IS NULL
+      `).get(weekStartStr) as { count: number }
+
+      // Tasks completed this month
+      const tasksMonth = database.prepare(`
+        SELECT COUNT(*) as count FROM tasks
+        WHERE status = 'done'
+        AND completed_at >= ?
+        AND deleted_at IS NULL
+      `).get(monthStartStr) as { count: number }
+
+      // Total tasks completed all time
+      const tasksAllTime = database.prepare(`
+        SELECT COUNT(*) as count FROM tasks
+        WHERE status = 'done'
+        AND deleted_at IS NULL
+      `).get() as { count: number }
+
+      // Quick todos completed today
+      const todosToday = database.prepare(`
+        SELECT COUNT(*) as count FROM quick_todos
+        WHERE completed = 1
+        AND completed_at >= ? AND completed_at < ?
+      `).get(todayStr, tomorrowStr) as { count: number }
+
+      // Quick todos completed this week
+      const todosWeek = database.prepare(`
+        SELECT COUNT(*) as count FROM quick_todos
+        WHERE completed = 1
+        AND completed_at >= ?
+      `).get(weekStartStr) as { count: number }
+
+      // Quick todos completed this month
+      const todosMonth = database.prepare(`
+        SELECT COUNT(*) as count FROM quick_todos
+        WHERE completed = 1
+        AND completed_at >= ?
+      `).get(monthStartStr) as { count: number }
+
+      // Total todos completed all time
+      const todosAllTime = database.prepare(`
+        SELECT COUNT(*) as count FROM quick_todos
+        WHERE completed = 1
+      `).get() as { count: number }
+
+      // Breakdown by todo list (all time)
+      const todosByList = database.prepare(`
+        SELECT list, COUNT(*) as count FROM quick_todos
+        WHERE completed = 1
+        GROUP BY list
+      `).all() as Array<{ list: string; count: number }>
+
+      // Projects completed
+      const projectsCompleted = database.prepare(`
+        SELECT COUNT(*) as count FROM projects
+        WHERE status = 'completed'
+      `).get() as { count: number }
+
+      // Current streak calculation
+      const streak = this._calculateStreak(database)
+
+      // Best day calculation
+      const bestDay = this._getBestDay(database)
+
+      // Weekly trend (last 7 days)
+      const weeklyTrend = this._getWeeklyTrend(database)
+
+      return {
+        tasks: {
+          today: tasksToday.count,
+          week: tasksWeek.count,
+          month: tasksMonth.count,
+          allTime: tasksAllTime.count
+        },
+        todos: {
+          today: todosToday.count,
+          week: todosWeek.count,
+          month: todosMonth.count,
+          allTime: todosAllTime.count,
+          byList: {
+            personal: todosByList.find(t => t.list === 'personal')?.count || 0,
+            work: todosByList.find(t => t.list === 'work')?.count || 0,
+            tweaks: todosByList.find(t => t.list === 'tweaks')?.count || 0
+          }
+        },
+        projects: {
+          completed: projectsCompleted.count
+        },
+        streak: {
+          current: streak.current,
+          longest: streak.longest
+        },
+        bestDay: bestDay,
+        weeklyTrend: weeklyTrend
+      }
+    },
+
+    _calculateStreak(database: ReturnType<typeof getDb>): { current: number; longest: number } {
+      // Get all days with completions (tasks or todos)
+      const completionDays = database.prepare(`
+        SELECT DISTINCT DATE(completed_at) as day FROM (
+          SELECT completed_at FROM tasks WHERE status = 'done' AND completed_at IS NOT NULL AND deleted_at IS NULL
+          UNION ALL
+          SELECT completed_at FROM quick_todos WHERE completed = 1 AND completed_at IS NOT NULL
+        )
+        ORDER BY day DESC
+      `).all() as Array<{ day: string }>
+
+      if (completionDays.length === 0) return { current: 0, longest: 0 }
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayStr = today.toISOString().split('T')[0]
+      const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      let currentStreak = 0
+      let longestStreak = 0
+      let tempStreak = 0
+      let prevDay: Date | null = null
+
+      // Check if streak is active (completed today or yesterday)
+      const firstDay = completionDays[0].day
+      const streakActive = firstDay === todayStr || firstDay === yesterdayStr
+
+      for (const { day } of completionDays) {
+        const currentDay = new Date(day)
+
+        if (prevDay === null) {
+          tempStreak = 1
+        } else {
+          const diffDays = Math.round((prevDay.getTime() - currentDay.getTime()) / (24 * 60 * 60 * 1000))
+          if (diffDays === 1) {
+            tempStreak++
+          } else {
+            longestStreak = Math.max(longestStreak, tempStreak)
+            tempStreak = 1
+          }
+        }
+        prevDay = currentDay
+      }
+      longestStreak = Math.max(longestStreak, tempStreak)
+
+      // Current streak only counts if active
+      if (streakActive) {
+        currentStreak = 0
+        prevDay = null
+        for (const { day } of completionDays) {
+          const currentDay = new Date(day)
+          if (prevDay === null) {
+            currentStreak = 1
+          } else {
+            const diffDays = Math.round((prevDay.getTime() - currentDay.getTime()) / (24 * 60 * 60 * 1000))
+            if (diffDays === 1) {
+              currentStreak++
+            } else {
+              break
+            }
+          }
+          prevDay = currentDay
+        }
+      }
+
+      return { current: currentStreak, longest: longestStreak }
+    },
+
+    _getBestDay(database: ReturnType<typeof getDb>): { date: string; count: number } {
+      const best = database.prepare(`
+        SELECT day, SUM(count) as total FROM (
+          SELECT DATE(completed_at) as day, COUNT(*) as count
+          FROM tasks
+          WHERE status = 'done' AND completed_at IS NOT NULL AND deleted_at IS NULL
+          GROUP BY DATE(completed_at)
+          UNION ALL
+          SELECT DATE(completed_at) as day, COUNT(*) as count
+          FROM quick_todos
+          WHERE completed = 1 AND completed_at IS NOT NULL
+          GROUP BY DATE(completed_at)
+        )
+        GROUP BY day
+        ORDER BY total DESC
+        LIMIT 1
+      `).get() as { day: string; total: number } | undefined
+
+      return best ? { date: best.day, count: best.total } : { date: '', count: 0 }
+    },
+
+    _getWeeklyTrend(database: ReturnType<typeof getDb>): Array<{ day: string; tasks: number; todos: number }> {
+      // Get task completions grouped by date for the last 7 days
+      const tasksByDay = database.prepare(`
+        SELECT DATE(completed_at, 'localtime') as day, COUNT(*) as count
+        FROM tasks
+        WHERE status = 'done'
+        AND completed_at >= datetime('now', '-7 days')
+        AND deleted_at IS NULL
+        GROUP BY DATE(completed_at, 'localtime')
+      `).all() as Array<{ day: string; count: number }>
+
+      // Get todo completions grouped by date for the last 7 days
+      const todosByDay = database.prepare(`
+        SELECT DATE(completed_at, 'localtime') as day, COUNT(*) as count
+        FROM quick_todos
+        WHERE completed = 1
+        AND completed_at >= datetime('now', '-7 days')
+        GROUP BY DATE(completed_at, 'localtime')
+      `).all() as Array<{ day: string; count: number }>
+
+      // Create lookup maps
+      const tasksMap = new Map(tasksByDay.map(r => [r.day, r.count]))
+      const todosMap = new Map(todosByDay.map(r => [r.day, r.count]))
+
+      // Build result for the last 7 days
+      const result: Array<{ day: string; tasks: number; todos: number }> = []
+      const now = new Date()
+
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now)
+        date.setDate(date.getDate() - i)
+        // Format as YYYY-MM-DD in local timezone
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+        result.push({
+          day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+          tasks: tasksMap.get(dateStr) || 0,
+          todos: todosMap.get(dateStr) || 0
+        })
+      }
+
+      return result
     }
   }
 }

@@ -119,6 +119,62 @@ export interface QuickTodo {
   updated_at: string
 }
 
+export interface Source {
+  id: string
+  project_id: string | null
+  task_id: string | null
+  quick_todo_id: string | null
+  url: string
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+  created_at: string
+}
+
+export interface UrlMetadata {
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+}
+
+export interface CompletionStats {
+  tasks: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+  }
+  todos: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+    byList: {
+      personal: number
+      work: number
+      tweaks: number
+    }
+  }
+  projects: {
+    completed: number
+  }
+  streak: {
+    current: number
+    longest: number
+  }
+  bestDay: {
+    date: string
+    count: number
+  }
+  weeklyTrend: Array<{
+    day: string
+    tasks: number
+    todos: number
+  }>
+}
+
 declare global {
   interface Window {
     api: {
@@ -169,7 +225,7 @@ declare global {
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
       copilot: {
-        chat: (message: string, projectId?: string, taskId?: string, conversationHistory?: ConversationMessage[]) => Promise<ChatResponse>
+        chat: (message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ConversationMessage[]) => Promise<ChatResponse>
         parseProjectBrainDump: (brainDump: string) => Promise<ParsedProject>
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
       }
@@ -181,6 +237,19 @@ declare global {
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
         update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+      }
+      sources: {
+        getByTask: (taskId: string) => Promise<Source[]>
+        getByQuickTodo: (quickTodoId: string) => Promise<Source[]>
+        getByProject: (projectId: string) => Promise<Source[]>
+        getById: (id: string) => Promise<Source | null>
+        create: (source: Omit<Source, 'id' | 'created_at'>) => Promise<Source>
+        update: (id: string, updates: Partial<Pick<Source, 'title' | 'description' | 'favicon_url' | 'source_type'>>) => Promise<Source>
+        delete: (id: string) => Promise<void>
+        fetchMetadata: (url: string) => Promise<UrlMetadata>
+      }
+      stats: {
+        getCompletionStats: () => Promise<CompletionStats>
       }
       obsidian: {
         selectVaultPath: () => Promise<string | null>

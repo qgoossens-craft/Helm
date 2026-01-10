@@ -117,6 +117,62 @@ export interface QuickTodo {
   updated_at: string
 }
 
+export interface Source {
+  id: string
+  project_id: string | null
+  task_id: string | null
+  quick_todo_id: string | null
+  url: string
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+  created_at: string
+}
+
+export interface UrlMetadata {
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+}
+
+export interface CompletionStats {
+  tasks: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+  }
+  todos: {
+    today: number
+    week: number
+    month: number
+    allTime: number
+    byList: {
+      personal: number
+      work: number
+      tweaks: number
+    }
+  }
+  projects: {
+    completed: number
+  }
+  streak: {
+    current: number
+    longest: number
+  }
+  bestDay: {
+    date: string
+    count: number
+  }
+  weeklyTrend: Array<{
+    day: string
+    tasks: number
+    todos: number
+  }>
+}
+
 // Expose API to renderer
 contextBridge.exposeInMainWorld('api', {
   // Projects
@@ -219,10 +275,36 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:delete', id)
   },
 
+  // Sources (URL links)
+  sources: {
+    getByTask: (taskId: string): Promise<Source[]> =>
+      ipcRenderer.invoke('db:sources:getByTask', taskId),
+    getByQuickTodo: (quickTodoId: string): Promise<Source[]> =>
+      ipcRenderer.invoke('db:sources:getByQuickTodo', quickTodoId),
+    getByProject: (projectId: string): Promise<Source[]> =>
+      ipcRenderer.invoke('db:sources:getByProject', projectId),
+    getById: (id: string): Promise<Source | null> =>
+      ipcRenderer.invoke('db:sources:getById', id),
+    create: (source: Omit<Source, 'id' | 'created_at'>): Promise<Source> =>
+      ipcRenderer.invoke('db:sources:create', source),
+    update: (id: string, updates: Partial<Pick<Source, 'title' | 'description' | 'favicon_url' | 'source_type'>>): Promise<Source> =>
+      ipcRenderer.invoke('db:sources:update', id, updates),
+    delete: (id: string): Promise<void> =>
+      ipcRenderer.invoke('db:sources:delete', id),
+    fetchMetadata: (url: string): Promise<UrlMetadata> =>
+      ipcRenderer.invoke('sources:fetchMetadata', url)
+  },
+
+  // Stats
+  stats: {
+    getCompletionStats: (): Promise<CompletionStats> =>
+      ipcRenderer.invoke('db:stats:getCompletionStats')
+  },
+
   // AI Operations
   copilot: {
-    chat: (message: string, projectId?: string, taskId?: string, conversationHistory?: ConversationMessage[]): Promise<ChatResponse> =>
-      ipcRenderer.invoke('ai:chat', message, projectId, taskId, conversationHistory),
+    chat: (message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ConversationMessage[]): Promise<ChatResponse> =>
+      ipcRenderer.invoke('ai:chat', message, projectId, taskId, quickTodoId, conversationHistory),
     parseProjectBrainDump: (brainDump: string): Promise<ParsedProject> =>
       ipcRenderer.invoke('ai:parseProjectBrainDump', brainDump),
     suggestTaskBreakdown: (taskTitle: string, projectContext?: string): Promise<string[]> =>
@@ -310,6 +392,19 @@ declare global {
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
         update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+      }
+      sources: {
+        getByTask: (taskId: string) => Promise<Source[]>
+        getByQuickTodo: (quickTodoId: string) => Promise<Source[]>
+        getByProject: (projectId: string) => Promise<Source[]>
+        getById: (id: string) => Promise<Source | null>
+        create: (source: Omit<Source, 'id' | 'created_at'>) => Promise<Source>
+        update: (id: string, updates: Partial<Pick<Source, 'title' | 'description' | 'favicon_url' | 'source_type'>>) => Promise<Source>
+        delete: (id: string) => Promise<void>
+        fetchMetadata: (url: string) => Promise<UrlMetadata>
+      }
+      stats: {
+        getCompletionStats: () => Promise<CompletionStats>
       }
       obsidian: {
         selectVaultPath: () => Promise<string | null>

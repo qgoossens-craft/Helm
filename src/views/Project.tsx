@@ -1,13 +1,13 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
-import type { Task, Document } from '../types/global'
+import type { Task, Document, Source, UrlMetadata } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
 type ViewMode = 'list' | 'kanban'
@@ -25,6 +25,17 @@ export function Project() {
   const [isUploading, setIsUploading] = useState(false)
   const [showDocuments, setShowDocuments] = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // Sources state
+  const [sources, setSources] = useState<Source[]>([])
+  const [showSources, setShowSources] = useState(true)
+  const [isAddingSource, setIsAddingSource] = useState(false)
+  const [newSourceUrl, setNewSourceUrl] = useState('')
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false)
+  const [sourcePreview, setSourcePreview] = useState<{
+    isOpen: boolean
+    source: Source | null
+  }>({ isOpen: false, source: null })
   const [preview, setPreview] = useState<{
     isOpen: boolean
     dataUrl: string | null
@@ -81,6 +92,20 @@ export function Project() {
     fetchDocuments()
     // Refetch when Obsidian browser closes (after import)
   }, [id, isObsidianBrowserOpen])
+
+  // Fetch project sources
+  useEffect(() => {
+    async function fetchSources() {
+      if (!id) return
+      try {
+        const projectSources = await window.api.sources.getByProject(id)
+        setSources(projectSources)
+      } catch (err) {
+        console.error('Failed to fetch sources:', err)
+      }
+    }
+    fetchSources()
+  }, [id])
 
   const project = projects.find((p) => p.id === id)
   const projectTasks = tasks.filter((t) => t.project_id === id && !t.parent_task_id)
@@ -275,16 +300,74 @@ export function Project() {
     setPreview({ isOpen: false, dataUrl: null, fileName: '', fileType: '' })
   }
 
-  // Handle ESC key to close preview modal
+  // Source handlers
+  const handleAddSource = async () => {
+    if (!newSourceUrl.trim() || !id) return
+
+    setIsFetchingMetadata(true)
+    try {
+      const metadata: UrlMetadata = await window.api.sources.fetchMetadata(newSourceUrl.trim())
+      const newSource = await window.api.sources.create({
+        project_id: id,
+        task_id: null,
+        quick_todo_id: null,
+        url: newSourceUrl.trim(),
+        title: metadata.title,
+        description: metadata.description,
+        favicon_url: metadata.favicon_url,
+        source_type: metadata.source_type
+      })
+      setSources(prev => [...prev, newSource])
+      setNewSourceUrl('')
+      setIsAddingSource(false)
+    } catch (err) {
+      console.error('Failed to add source:', err)
+    } finally {
+      setIsFetchingMetadata(false)
+    }
+  }
+
+  const handleDeleteSource = async (sourceId: string) => {
+    try {
+      await window.api.sources.delete(sourceId)
+      setSources(prev => prev.filter(s => s.id !== sourceId))
+    } catch (err) {
+      console.error('Failed to delete source:', err)
+    }
+  }
+
+  const handleOpenSourceExternal = (url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const getSourceIcon = (source: Source) => {
+    switch (source.source_type) {
+      case 'video':
+        return <Video size={14} className="text-red-500" />
+      case 'article':
+        return <FileText size={14} className="text-blue-500" />
+      case 'document':
+        return <FileText size={14} className="text-green-500" />
+      default:
+        return <Globe size={14} className="text-helm-text-muted" />
+    }
+  }
+
+  const closeSourcePreview = () => {
+    setSourcePreview({ isOpen: false, source: null })
+  }
+
+  // Handle ESC key to close preview modals
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && preview.isOpen) {
-        closePreview()
+      if (e.key === 'Escape') {
+        if (preview.isOpen) closePreview()
+        if (sourcePreview.isOpen) closeSourcePreview()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [preview.isOpen])
+  }, [preview.isOpen, sourcePreview.isOpen])
 
   const handleDeleteProject = async () => {
     if (!id) return
@@ -597,6 +680,118 @@ export function Project() {
             )}
           </div>
 
+          {/* Sources */}
+          <div>
+            <button
+              onClick={() => setShowSources(!showSources)}
+              className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
+            >
+              {showSources ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Sources
+              {sources.length > 0 && (
+                <span className="text-helm-text-muted">({sources.length})</span>
+              )}
+            </button>
+
+            {showSources && (
+              <div className="space-y-2">
+                {sources.map((source) => (
+                  <div
+                    key={source.id}
+                    className="flex items-center gap-2 p-2 bg-helm-bg border border-helm-border rounded-lg group cursor-pointer hover:border-helm-primary transition-colors"
+                    onClick={() => setSourcePreview({ isOpen: true, source })}
+                  >
+                    {source.favicon_url ? (
+                      <img src={source.favicon_url} alt="" className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <span className="flex-shrink-0">{getSourceIcon(source)}</span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-helm-text truncate">
+                        {source.title}
+                      </p>
+                      <p className="text-xs text-helm-text-muted truncate">
+                        {new URL(source.url).hostname}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenSourceExternal(source.url)
+                      }}
+                      className="p-1 text-helm-text-muted hover:text-helm-primary opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                      title="Open in browser"
+                    >
+                      <ExternalLink size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteSource(source.id)
+                      }}
+                      className="p-1 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+
+                {isAddingSource ? (
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      value={newSourceUrl}
+                      onChange={(e) => setNewSourceUrl(e.target.value)}
+                      placeholder="https://..."
+                      autoFocus
+                      className="w-full px-3 py-2 text-xs bg-helm-bg border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddSource()
+                        if (e.key === 'Escape') {
+                          setIsAddingSource(false)
+                          setNewSourceUrl('')
+                        }
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddSource}
+                        disabled={!newSourceUrl.trim() || isFetchingMetadata}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-helm-primary hover:bg-helm-primary-hover text-white rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {isFetchingMetadata ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Fetching...
+                          </>
+                        ) : (
+                          'Add'
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAddingSource(false)
+                          setNewSourceUrl('')
+                        }}
+                        className="px-3 py-1.5 text-xs text-helm-text-muted hover:text-helm-text transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsAddingSource(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs text-helm-text-muted hover:text-helm-text bg-helm-bg hover:bg-helm-surface-elevated border border-dashed border-helm-border rounded-lg transition-colors"
+                  >
+                    <Link2 size={12} />
+                    Add link
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Delete Project */}
           <div className="pt-4 border-t border-helm-border">
             {showDeleteConfirm ? (
@@ -689,6 +884,76 @@ export function Project() {
             ) : null}
 
             <p className="text-center text-helm-text-muted text-sm mt-4 bg-helm-surface/80 px-3 py-1 rounded">{preview.fileName}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Source Preview Modal */}
+      {sourcePreview.isOpen && sourcePreview.source && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
+          onClick={closeSourcePreview}
+        >
+          <div
+            className="bg-helm-surface border border-helm-border rounded-xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with favicon and type */}
+            <div className="flex items-start gap-3 mb-4">
+              {sourcePreview.source.favicon_url ? (
+                <img
+                  src={sourcePreview.source.favicon_url}
+                  alt=""
+                  className="w-8 h-8 rounded flex-shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded bg-helm-bg flex items-center justify-center flex-shrink-0">
+                  {getSourceIcon(sourcePreview.source)}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium text-helm-text mb-1">
+                  {sourcePreview.source.title}
+                </h3>
+                <p className="text-xs text-helm-text-muted truncate">
+                  {new URL(sourcePreview.source.url).hostname}
+                </p>
+              </div>
+              <span className="px-2 py-0.5 text-xs rounded bg-helm-bg text-helm-text-muted capitalize">
+                {sourcePreview.source.source_type}
+              </span>
+            </div>
+
+            {/* Description */}
+            {sourcePreview.source.description && (
+              <p className="text-sm text-helm-text-muted mb-4 line-clamp-3">
+                {sourcePreview.source.description}
+              </p>
+            )}
+
+            {/* URL */}
+            <div className="p-3 bg-helm-bg rounded-lg mb-4">
+              <p className="text-xs text-helm-text-muted break-all">
+                {sourcePreview.source.url}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleOpenSourceExternal(sourcePreview.source!.url)}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-helm-primary hover:bg-helm-primary-hover text-white rounded-lg transition-colors"
+              >
+                <ExternalLink size={16} />
+                Open in Browser
+              </button>
+              <button
+                onClick={closeSourcePreview}
+                className="px-4 py-2 text-helm-text-muted hover:text-helm-text transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

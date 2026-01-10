@@ -130,7 +130,28 @@ CREATE TABLE IF NOT EXISTS quick_todos (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Sources (URL links attached to tasks/todos)
+CREATE TABLE IF NOT EXISTS sources (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    task_id TEXT,
+    quick_todo_id TEXT,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    favicon_url TEXT,
+    source_type TEXT NOT NULL DEFAULT 'link'
+        CHECK (source_type IN ('link', 'article', 'video', 'document')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (quick_todo_id) REFERENCES quick_todos(id) ON DELETE CASCADE
+);
+
 -- Indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_sources_task ON sources(task_id);
+CREATE INDEX IF NOT EXISTS idx_sources_project ON sources(project_id);
+CREATE INDEX IF NOT EXISTS idx_sources_quick_todo ON sources(quick_todo_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);

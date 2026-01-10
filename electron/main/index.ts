@@ -1,10 +1,134 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog, shell, net } from 'electron'
 import { join } from 'path'
 import { initDatabase, db } from '../database/db'
 import * as ai from '../services/ai'
 import * as documents from '../services/documents'
 
 let mainWindow: BrowserWindow | null = null
+
+// URL metadata fetching
+interface UrlMetadata {
+  title: string
+  description: string | null
+  favicon_url: string | null
+  source_type: 'link' | 'article' | 'video' | 'document'
+}
+
+async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
+  try {
+    // Normalize URL
+    let normalizedUrl = url
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      normalizedUrl = 'https://' + url
+    }
+
+    const parsedUrl = new URL(normalizedUrl)
+    const hostname = parsedUrl.hostname
+
+    // Detect source type from URL
+    let sourceType: UrlMetadata['source_type'] = 'link'
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be') || hostname.includes('vimeo.com')) {
+      sourceType = 'video'
+    } else if (hostname.includes('medium.com') || hostname.includes('dev.to') || hostname.includes('hashnode.') || url.includes('/blog/') || url.includes('/article/')) {
+      sourceType = 'article'
+    } else if (url.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$/i)) {
+      sourceType = 'document'
+    }
+
+    // Fetch page HTML to extract metadata
+    const response = await net.fetch(normalizedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    })
+
+    if (!response.ok) {
+      return {
+        title: hostname,
+        description: null,
+        favicon_url: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+        source_type: sourceType
+      }
+    }
+
+    const html = await response.text()
+
+    // Extract title
+    let title = hostname
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+    if (titleMatch) {
+      title = titleMatch[1].trim()
+      // Decode HTML entities
+      title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    }
+
+    // Extract description from meta tags
+    let description: string | null = null
+    const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
+    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+    if (ogDescMatch) {
+      description = ogDescMatch[1].trim()
+    } else if (metaDescMatch) {
+      description = metaDescMatch[1].trim()
+    }
+    if (description) {
+      description = description.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    }
+
+    // Extract favicon - try multiple sources
+    let faviconUrl: string | null = null
+    const iconLinkMatch = html.match(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i)
+    const appleTouchMatch = html.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i)
+
+    if (iconLinkMatch) {
+      faviconUrl = iconLinkMatch[1]
+    } else if (appleTouchMatch) {
+      faviconUrl = appleTouchMatch[1]
+    }
+
+    // Make favicon URL absolute if relative
+    if (faviconUrl && !faviconUrl.startsWith('http')) {
+      if (faviconUrl.startsWith('//')) {
+        faviconUrl = 'https:' + faviconUrl
+      } else if (faviconUrl.startsWith('/')) {
+        faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}${faviconUrl}`
+      } else {
+        faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}/${faviconUrl}`
+      }
+    }
+
+    // Fallback to Google's favicon service
+    if (!faviconUrl) {
+      faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`
+    }
+
+    return {
+      title,
+      description,
+      favicon_url: faviconUrl,
+      source_type: sourceType
+    }
+  } catch (error) {
+    console.error('Failed to fetch URL metadata:', error)
+    // Return basic metadata with domain as title
+    try {
+      const parsedUrl = new URL(url.startsWith('http') ? url : 'https://' + url)
+      return {
+        title: parsedUrl.hostname,
+        description: null,
+        favicon_url: `https://www.google.com/s2/favicons?domain=${parsedUrl.hostname}&sz=32`,
+        source_type: 'link'
+      }
+    } catch {
+      return {
+        title: url,
+        description: null,
+        favicon_url: null,
+        source_type: 'link'
+      }
+    }
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -161,9 +285,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:quickTodos:update', (_, id: string, updates) => db.quickTodos.update(id, updates))
   ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
 
+  // Sources (URL links)
+  ipcMain.handle('db:sources:getByTask', (_, taskId: string) => db.sources.getByTask(taskId))
+  ipcMain.handle('db:sources:getByQuickTodo', (_, quickTodoId: string) => db.sources.getByQuickTodo(quickTodoId))
+  ipcMain.handle('db:sources:getByProject', (_, projectId: string) => db.sources.getByProject(projectId))
+  ipcMain.handle('db:sources:getById', (_, id: string) => db.sources.getById(id))
+  ipcMain.handle('db:sources:create', (_, source) => db.sources.create(source))
+  ipcMain.handle('db:sources:update', (_, id: string, updates) => db.sources.update(id, updates))
+  ipcMain.handle('db:sources:delete', (_, id: string) => db.sources.delete(id))
+
+  // Sources - URL metadata fetching
+  ipcMain.handle('sources:fetchMetadata', async (_, url: string) => {
+    return fetchUrlMetadata(url)
+  })
+
+  // Stats
+  ipcMain.handle('db:stats:getCompletionStats', () => db.stats.getCompletionStats())
+
   // AI Operations
-  ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string, conversationHistory?: ai.ConversationMessage[]) => {
-    return ai.chat(message, projectId, taskId, conversationHistory || [])
+  ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ai.ConversationMessage[]) => {
+    return ai.chat(message, projectId, taskId, quickTodoId, conversationHistory || [])
   })
 
   ipcMain.handle('ai:parseProjectBrainDump', async (_, brainDump: string) => {

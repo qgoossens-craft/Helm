@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Send, Loader2, Sparkles, RotateCcw } from 'lucide-react'
-import { useUIStore, useProjectsStore, useCopilotStore } from '../store'
+import { useUIStore, useProjectsStore, useCopilotStore, useQuickTodosStore } from '../store'
 import type { ConversationMessage } from '../types/global'
 
 export function CopilotModal() {
   const { isCopilotOpen, copilotContext, closeCopilot } = useUIStore()
   const { projects } = useProjectsStore()
-  const { messages, addMessage, clearMessages, setProjectContext } = useCopilotStore()
+  const { todos } = useQuickTodosStore()
+  const { messages, addMessage, clearMessages, setContext } = useCopilotStore()
 
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -20,12 +21,17 @@ export function CopilotModal() {
     ? projects.find(p => p.id === copilotContext.projectId)
     : null
 
-  // Track project context changes - clear conversation if project changes
+  // Get current quick todo if context is provided
+  const currentQuickTodo = copilotContext?.quickTodoId
+    ? todos.find(t => t.id === copilotContext.quickTodoId)
+    : null
+
+  // Track context changes - clear conversation if context changes
   useEffect(() => {
     if (isCopilotOpen) {
-      setProjectContext(copilotContext?.projectId || null)
+      setContext(copilotContext || null)
     }
-  }, [isCopilotOpen, copilotContext?.projectId, setProjectContext])
+  }, [isCopilotOpen, copilotContext, setContext])
 
   // Auto-focus input when modal opens
   useEffect(() => {
@@ -64,6 +70,7 @@ export function CopilotModal() {
         userContent,
         copilotContext?.projectId,
         copilotContext?.taskId,
+        copilotContext?.quickTodoId,
         conversationHistory
       )
 
@@ -91,7 +98,13 @@ export function CopilotModal() {
   }
 
   // Quick prompts for empty state
-  const quickPrompts = currentProject
+  const quickPrompts = currentQuickTodo
+    ? [
+        'Help me get started on this',
+        'What\'s the first step?',
+        'Break this down for me'
+      ]
+    : currentProject
     ? [
         'What should I work on next?',
         'Help me break down my current tasks',
@@ -117,11 +130,15 @@ export function CopilotModal() {
             <Sparkles size={20} className="text-helm-primary" />
             <div>
               <h2 className="font-medium text-helm-text">Jeeves</h2>
-              {currentProject && (
+              {currentQuickTodo ? (
                 <p className="text-xs text-helm-text-muted">
-                  Context: {currentProject.name}
+                  Todo: {currentQuickTodo.title.substring(0, 30)}{currentQuickTodo.title.length > 30 ? '...' : ''}
                 </p>
-              )}
+              ) : currentProject ? (
+                <p className="text-xs text-helm-text-muted">
+                  Project: {currentProject.name}
+                </p>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -150,7 +167,9 @@ export function CopilotModal() {
               <Sparkles size={32} className="text-helm-primary mb-4" />
               <h3 className="text-helm-text font-medium mb-2">How can I help?</h3>
               <p className="text-sm text-helm-text-muted mb-6 max-w-xs">
-                {currentProject
+                {currentQuickTodo
+                  ? `I can see your todo "${currentQuickTodo.title.substring(0, 40)}${currentQuickTodo.title.length > 40 ? '...' : ''}" and its attachments.`
+                  : currentProject
                   ? `I have context about "${currentProject.name}". Ask me anything!`
                   : 'Ask me about your projects, tasks, or what to work on next.'}
               </p>

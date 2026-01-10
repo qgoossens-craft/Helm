@@ -6,6 +6,7 @@ interface UIState {
   copilotContext: {
     projectId?: string
     taskId?: string
+    quickTodoId?: string
   } | null
 
   // Project kickoff wizard
@@ -27,7 +28,7 @@ interface UIState {
   } | null
 
   // Actions
-  openCopilot: (context?: { projectId?: string; taskId?: string }) => void
+  openCopilot: (context?: { projectId?: string; taskId?: string; quickTodoId?: string }) => void
   closeCopilot: () => void
   openKickoffWizard: () => void
   closeKickoffWizard: () => void
