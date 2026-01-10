@@ -110,13 +110,17 @@ export function Layout() {
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                         isActive
-                          ? 'bg-helm-surface-elevated text-helm-text'
+                          ? 'bg-helm-primary text-white'
                           : 'text-helm-text-muted hover:bg-helm-surface hover:text-helm-text'
                       }`
                     }
                   >
-                    <IconComponent size={16} className="shrink-0" style={{ color: projectColor }} />
-                    <span className="truncate">{project.name}</span>
+                    {({ isActive }) => (
+                      <>
+                        <IconComponent size={16} className="shrink-0" style={!isActive ? { color: projectColor } : undefined} />
+                        <span className="truncate">{project.name}</span>
+                      </>
+                    )}
                   </NavLink>
                 )
               })}
