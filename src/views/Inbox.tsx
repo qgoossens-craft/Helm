@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench } from 'lucide-react'
+import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench, ChevronDown, Inbox as InboxIcon } from 'lucide-react'
 import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
@@ -7,13 +7,19 @@ import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import type { Task } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
+type TargetList = 'inbox' | 'personal' | 'work' | 'tweaks'
+
 export function Inbox() {
   const [newItem, setNewItem] = useState('')
+  const [targetList, setTargetList] = useState<TargetList>('inbox')
+  const [showListSelector, setShowListSelector] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listSelectorRef = useRef<HTMLDivElement>(null)
   const { inboxTasks, fetchInbox, createTask, updateTask, deleteTask } = useTasksStore()
   const { projects, fetchProjects } = useProjectsStore()
   const { openMoveToProject } = useUIStore()
+  const { createTodo } = useQuickTodosStore()
 
   useEffect(() => {
     fetchInbox()
@@ -31,24 +37,55 @@ export function Inbox() {
     inputRef.current?.focus()
   }, [])
 
+  // Close list selector when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (listSelectorRef.current && !listSelectorRef.current.contains(e.target as Node)) {
+        setShowListSelector(false)
+      }
+    }
+    if (showListSelector) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showListSelector])
+
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newItem.trim()) return
 
     try {
-      await createTask({
-        project_id: null,
-        parent_task_id: null,
-        title: newItem.trim(),
-        description: null,
-        status: 'todo',
-        order: inboxTasks.length
-      })
+      if (targetList === 'inbox') {
+        // Create as inbox task
+        await createTask({
+          project_id: null,
+          parent_task_id: null,
+          title: newItem.trim(),
+          description: null,
+          status: 'todo',
+          order: inboxTasks.length
+        })
+      } else {
+        // Create directly as QuickTodo
+        await createTodo({
+          title: newItem.trim(),
+          list: targetList
+        })
+      }
       setNewItem('')
     } catch (err) {
       console.error('Failed to add item:', err)
     }
   }
+
+  const listOptions: { value: TargetList; label: string; icon: React.ReactNode }[] = [
+    { value: 'inbox', label: 'Inbox', icon: <InboxIcon size={14} /> },
+    { value: 'personal', label: 'Personal', icon: <User size={14} /> },
+    { value: 'work', label: 'Work', icon: <Briefcase size={14} /> },
+    { value: 'tweaks', label: 'Tweaks', icon: <Wrench size={14} /> }
+  ]
+
+  const selectedListOption = listOptions.find(opt => opt.value === targetList)!
 
   const handleToggleComplete = async (id: string, currentStatus: string) => {
     try {
@@ -105,6 +142,40 @@ export function Inbox() {
                   placeholder="Add item..."
                   className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors"
                 />
+              </div>
+              {/* List selector dropdown */}
+              <div className="relative" ref={listSelectorRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowListSelector(!showListSelector)}
+                  className="flex items-center gap-2 px-3 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text hover:border-helm-text-muted transition-colors"
+                >
+                  {selectedListOption.icon}
+                  <span className="text-sm">{selectedListOption.label}</span>
+                  <ChevronDown size={14} className={`text-helm-text-muted transition-transform ${showListSelector ? 'rotate-180' : ''}`} />
+                </button>
+                {showListSelector && (
+                  <div className="absolute right-0 top-full mt-1 bg-helm-surface border border-helm-border rounded-lg shadow-lg py-1 z-10 min-w-[140px]">
+                    {listOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setTargetList(opt.value)
+                          setShowListSelector(false)
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                          targetList === opt.value
+                            ? 'bg-helm-primary/10 text-helm-primary'
+                            : 'text-helm-text hover:bg-helm-surface-elevated'
+                        }`}
+                      >
+                        {opt.icon}
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 type="submit"
