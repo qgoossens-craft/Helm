@@ -21,6 +21,7 @@ export interface Task {
   description: string | null
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
+  due_date: string | null
   order: number
   created_at: string
   updated_at: string

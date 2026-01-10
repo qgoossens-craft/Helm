@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw, Sparkles } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw, Sparkles, Calendar } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
@@ -168,6 +168,14 @@ export function Project() {
       await updateTask(taskId, { priority })
     } catch (err) {
       console.error('Failed to update task priority:', err)
+    }
+  }
+
+  const handleSetDueDate = async (taskId: string, date: string | null) => {
+    try {
+      await updateTask(taskId, { due_date: date })
+    } catch (err) {
+      console.error('Failed to set due date:', err)
     }
   }
 
@@ -416,6 +424,7 @@ export function Project() {
             onRestore={handleRestoreTask}
             onSelect={setSelectedTask}
             onPriorityChange={handlePriorityChange}
+            onSetDueDate={handleSetDueDate}
             isDeleted={taskFilter === 'deleted'}
           />
         ) : (
@@ -688,10 +697,11 @@ interface ListViewProps {
   onRestore: (id: string) => void
   onSelect: (task: Task) => void
   onPriorityChange: (id: string, priority: Priority | null) => void
+  onSetDueDate: (id: string, date: string | null) => void
   isDeleted: boolean
 }
 
-function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, isDeleted }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, isDeleted }: ListViewProps) {
   if (tasks.length === 0) {
     return (
       <div className="flex-1 space-y-2">
@@ -705,7 +715,7 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
   return (
     <div className="flex-1 space-y-2 overflow-y-auto">
       {tasks.map((task) => (
-        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} onPriorityChange={onPriorityChange} isDeleted={isDeleted} />
+        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} onPriorityChange={onPriorityChange} onSetDueDate={onSetDueDate} isDeleted={isDeleted} />
       ))}
     </div>
   )
@@ -718,11 +728,13 @@ interface TaskRowProps {
   onRestore: (id: string) => void
   onSelect: (task: Task) => void
   onPriorityChange: (id: string, priority: Priority | null) => void
+  onSetDueDate: (id: string, date: string | null) => void
   isDeleted: boolean
 }
 
-function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, isDeleted }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, isDeleted }: TaskRowProps) {
   const [isCompleting, setIsCompleting] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -739,11 +751,38 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
     }
   }
 
+  const formatDueDate = (dateStr: string | null): string => {
+    if (!dateStr) return ''
+
+    const date = new Date(dateStr)
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    // Reset time for comparison
+    today.setHours(0, 0, 0, 0)
+    tomorrow.setHours(0, 0, 0, 0)
+    date.setHours(0, 0, 0, 0)
+
+    if (date.getTime() === today.getTime()) return 'Today'
+    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow'
+
+    // Check if within this week
+    const dayDiff = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (dayDiff > 0 && dayDiff < 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'short' })
+    }
+
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  }
+
+  const isOverdue = task.due_date && task.status !== 'done' && new Date(task.due_date) < new Date(new Date().toDateString())
+
   return (
     <div
       onClick={() => !isDeleted && !isCompleting && onSelect(task)}
-      className={`flex items-center gap-3 p-3 bg-helm-surface border border-helm-border rounded-lg group animate-slide-up transition-colors ${
-        isDeleted ? 'opacity-60' : 'cursor-pointer hover:border-helm-primary'
+      className={`flex items-center gap-3 p-3 bg-helm-surface border rounded-lg group animate-slide-up transition-colors ${
+        isDeleted ? 'border-helm-border/50 opacity-60' : isOverdue ? 'border-helm-error/50 cursor-pointer hover:border-helm-primary' : 'border-helm-border cursor-pointer hover:border-helm-primary'
       } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
       {!isDeleted && (
@@ -771,8 +810,64 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
         </span>
       )}
       {!isDeleted && task.status !== 'done' && !isCompleting && (
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <PrioritySelector priority={task.priority} onPriorityChange={(p) => onPriorityChange(task.id, p)} />
+          {/* Due date picker */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowDatePicker(!showDatePicker)
+              }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                task.due_date
+                  ? isOverdue
+                    ? 'text-helm-error bg-helm-error/10'
+                    : 'text-helm-text-muted bg-helm-bg'
+                  : 'text-helm-text-muted hover:bg-helm-bg'
+              }`}
+              title="Set due date"
+            >
+              <Calendar size={12} />
+              {task.due_date ? formatDueDate(task.due_date) : 'Set date'}
+            </button>
+
+            {showDatePicker && (
+              <div className="absolute right-0 top-full mt-1 bg-helm-surface border border-helm-border rounded-lg shadow-lg p-2 z-10">
+                <input
+                  type="date"
+                  value={task.due_date || ''}
+                  onChange={(e) => {
+                    onSetDueDate(task.id, e.target.value || null)
+                    setShowDatePicker(false)
+                  }}
+                  className="bg-helm-bg border border-helm-border rounded px-2 py-1 text-sm text-helm-text"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                {task.due_date && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSetDueDate(task.id, null)
+                      setShowDatePicker(false)
+                    }}
+                    className="block w-full mt-1 text-xs text-helm-text-muted hover:text-helm-error"
+                  >
+                    Clear date
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Show due date when not hovering (if set) */}
+      {!isDeleted && task.due_date && task.status !== 'done' && !isCompleting && (
+        <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs group-hover:hidden ${
+          isOverdue ? 'text-helm-error bg-helm-error/10' : 'text-helm-text-muted bg-helm-bg'
+        }`}>
+          <Calendar size={12} />
+          {formatDueDate(task.due_date)}
         </div>
       )}
       {isDeleted ? (

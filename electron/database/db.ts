@@ -59,6 +59,12 @@ function runMigrations(db: Database.Database): void {
     console.log('Migration: Added priority column to tasks')
   }
 
+  // Migration: Add due_date column to tasks table
+  if (!taskColumns.includes('due_date')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN due_date TEXT DEFAULT NULL`)
+    console.log('Migration: Added due_date column to tasks')
+  }
+
   // Check if documents table exists and needs migration
   const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
   const columnNames = tableInfo.map(col => col.name)
@@ -239,6 +245,7 @@ interface Task {
   description: string | null
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
+  due_date: string | null
   order: number
   created_at: string
   updated_at: string
@@ -526,6 +533,10 @@ export const db = {
       if (updates.priority !== undefined) {
         fields.push('priority = ?')
         values.push(updates.priority)
+      }
+      if (updates.due_date !== undefined) {
+        fields.push('due_date = ?')
+        values.push(updates.due_date)
       }
 
       fields.push('updated_at = ?')
