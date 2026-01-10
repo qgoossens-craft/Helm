@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Inbox, AlertCircle, Bell, Check, ListTodo } from 'lucide-react'
 import { useProjectsStore, useTasksStore, useSettingsStore, useUIStore, useQuickTodosStore } from '../store'
-import { PROJECT_ICONS, PROJECT_COLORS } from '../components/Layout'
+import { PROJECT_ICONS, PROJECT_COLORS } from '../lib/projectConstants'
 import type { QuickTodo } from '../types/global'
 
 export function Home() {

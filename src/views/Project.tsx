@@ -5,7 +5,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
+import { PriorityIndicator } from '../components/PriorityIndicator'
+import { PrioritySelector } from '../components/PrioritySelector'
 import type { Task, Document } from '../types/global'
+import type { Priority } from '../lib/priorityConstants'
 
 type ViewMode = 'list' | 'kanban'
 type TaskFilter = 'all' | 'active' | 'todo' | 'in_progress' | 'done' | 'deleted'
@@ -157,6 +160,14 @@ export function Project() {
       await updateTask(taskId, { status })
     } catch (err) {
       console.error('Failed to update task status:', err)
+    }
+  }
+
+  const handlePriorityChange = async (taskId: string, priority: Priority | null) => {
+    try {
+      await updateTask(taskId, { priority })
+    } catch (err) {
+      console.error('Failed to update task priority:', err)
     }
   }
 
@@ -404,6 +415,7 @@ export function Project() {
             onDelete={handleDeleteTask}
             onRestore={handleRestoreTask}
             onSelect={setSelectedTask}
+            onPriorityChange={handlePriorityChange}
             isDeleted={taskFilter === 'deleted'}
           />
         ) : (
@@ -675,10 +687,11 @@ interface ListViewProps {
   onDelete: (id: string) => void
   onRestore: (id: string) => void
   onSelect: (task: Task) => void
+  onPriorityChange: (id: string, priority: Priority | null) => void
   isDeleted: boolean
 }
 
-function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, isDeleted }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, isDeleted }: ListViewProps) {
   if (tasks.length === 0) {
     return (
       <div className="flex-1 space-y-2">
@@ -692,7 +705,7 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, isDeleted }:
   return (
     <div className="flex-1 space-y-2 overflow-y-auto">
       {tasks.map((task) => (
-        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} isDeleted={isDeleted} />
+        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} onPriorityChange={onPriorityChange} isDeleted={isDeleted} />
       ))}
     </div>
   )
@@ -704,10 +717,11 @@ interface TaskRowProps {
   onDelete: (id: string) => void
   onRestore: (id: string) => void
   onSelect: (task: Task) => void
+  onPriorityChange: (id: string, priority: Priority | null) => void
   isDeleted: boolean
 }
 
-function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, isDeleted }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, isDeleted }: TaskRowProps) {
   const [isCompleting, setIsCompleting] = useState(false)
 
   const handleToggle = (e: React.MouseEvent) => {
@@ -747,6 +761,7 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, isDeleted }: T
           )}
         </button>
       )}
+      <PriorityIndicator priority={task.priority} />
       <span className={`flex-1 text-sm ${task.status === 'done' || isDeleted || isCompleting ? 'text-helm-text-muted line-through' : 'text-helm-text'}`}>
         {task.title}
       </span>
@@ -754,6 +769,11 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, isDeleted }: T
         <span className="text-xs px-2 py-0.5 rounded bg-helm-primary/20 text-helm-primary">
           In Progress
         </span>
+      )}
+      {!isDeleted && task.status !== 'done' && !isCompleting && (
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <PrioritySelector priority={task.priority} onPriorityChange={(p) => onPriorityChange(task.id, p)} />
+        </div>
       )}
       {isDeleted ? (
         <button
@@ -868,7 +888,10 @@ function KanbanCard({ task, onDragStart, onDelete, onSelect }: KanbanCardProps) 
       onClick={() => onSelect(task)}
       className="p-3 bg-helm-bg border border-helm-border rounded-lg cursor-grab active:cursor-grabbing group hover:border-helm-primary transition-colors"
     >
-      <p className="text-sm text-helm-text">{task.title}</p>
+      <div className="flex items-center gap-2">
+        <PriorityIndicator priority={task.priority} />
+        <p className="text-sm text-helm-text flex-1">{task.title}</p>
+      </div>
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs text-helm-text-muted">
           {new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}

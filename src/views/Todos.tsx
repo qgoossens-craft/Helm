@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Calendar, Check } from 'lucide-react'
 import { useQuickTodosStore } from '../store'
+import { PriorityIndicator } from '../components/PriorityIndicator'
+import { PrioritySelector } from '../components/PrioritySelector'
 import type { QuickTodo } from '../types/global'
+import type { Priority } from '../lib/priorityConstants'
 
 type TodoList = 'personal' | 'work' | 'tweaks'
 
@@ -61,6 +64,14 @@ export function Todos() {
       await updateTodo(id, { due_date: date })
     } catch (err) {
       console.error('Failed to set due date:', err)
+    }
+  }
+
+  const handleSetPriority = async (id: string, priority: Priority | null) => {
+    try {
+      await updateTodo(id, { priority })
+    } catch (err) {
+      console.error('Failed to set priority:', err)
     }
   }
 
@@ -139,6 +150,7 @@ export function Todos() {
                 onToggle={() => handleToggle(todo.id)}
                 onDelete={() => handleDelete(todo.id)}
                 onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
+                onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
               />
             ))}
 
@@ -156,6 +168,7 @@ export function Todos() {
                     onToggle={() => handleToggle(todo.id)}
                     onDelete={() => handleDelete(todo.id)}
                     onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
+                    onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
                   />
                 ))}
               </>
@@ -182,9 +195,10 @@ interface TodoItemProps {
   onToggle: () => void
   onDelete: () => void
   onSetDueDate: (date: string | null) => void
+  onSetPriority: (priority: Priority | null) => void
 }
 
-function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
+function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: TodoItemProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
 
@@ -252,12 +266,22 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate }: TodoItemProps) {
         {(todo.completed || isCompleting) && <Check size={14} className={isCompleting ? 'animate-check-pop' : ''} />}
       </button>
 
+      {/* Priority indicator */}
+      <PriorityIndicator priority={todo.priority} />
+
       {/* Title */}
       <div className="flex-1 min-w-0">
         <p className={`text-helm-text truncate ${todo.completed || isCompleting ? 'line-through text-helm-text-muted' : ''}`}>
           {todo.title}
         </p>
       </div>
+
+      {/* Priority selector (on hover) */}
+      {!todo.completed && !isCompleting && (
+        <div className={`transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+          <PrioritySelector priority={todo.priority} onPriorityChange={onSetPriority} />
+        </div>
+      )}
 
       {/* Due date */}
       <div className="relative">

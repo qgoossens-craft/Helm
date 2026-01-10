@@ -53,6 +53,12 @@ function runMigrations(db: Database.Database): void {
     console.log('Migration: Added deleted_at column to tasks')
   }
 
+  // Migration: Add priority column to tasks table
+  if (!taskColumns.includes('priority')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT NULL CHECK (priority IN ('low', 'medium', 'high'))`)
+    console.log('Migration: Added priority column to tasks')
+  }
+
   // Check if documents table exists and needs migration
   const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
   const columnNames = tableInfo.map(col => col.name)
@@ -135,6 +141,15 @@ function runMigrations(db: Database.Database): void {
   } catch {
     // Table might not exist yet, which is fine - it will be created with the new schema
     console.log('Migration: quick_todos table check skipped (table may not exist yet)')
+  }
+
+  // Migration: Add priority column to quick_todos table
+  const quickTodosInfo = db.prepare("PRAGMA table_info(quick_todos)").all() as Array<{ name: string }>
+  const quickTodosColumns = quickTodosInfo.map(col => col.name)
+
+  if (!quickTodosColumns.includes('priority')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN priority TEXT DEFAULT NULL CHECK (priority IN ('low', 'medium', 'high'))`)
+    console.log('Migration: Added priority column to quick_todos')
   }
 }
 
@@ -223,6 +238,7 @@ interface Task {
   title: string
   description: string | null
   status: 'todo' | 'in_progress' | 'done'
+  priority: 'low' | 'medium' | 'high' | null
   order: number
   created_at: string
   updated_at: string
@@ -286,6 +302,7 @@ interface QuickTodo {
   id: string
   title: string
   list: 'personal' | 'work' | 'tweaks'
+  priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
   completed: boolean
   completed_at: string | null
@@ -446,8 +463,8 @@ export const db = {
       const order = task.order ?? orderResult.next_order
 
       const stmt = getDb().prepare(`
-        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, "order", created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -457,6 +474,7 @@ export const db = {
         task.title,
         task.description,
         task.status || 'todo',
+        task.priority || null,
         order,
         timestamp,
         timestamp
@@ -504,6 +522,10 @@ export const db = {
       if (updates.order !== undefined) {
         fields.push('"order" = ?')
         values.push(updates.order)
+      }
+      if (updates.priority !== undefined) {
+        fields.push('priority = ?')
+        values.push(updates.priority)
       }
 
       fields.push('updated_at = ?')
@@ -860,21 +882,21 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO quick_todos (id, title, list, due_date, completed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 0, ?, ?)
+        INSERT INTO quick_todos (id, title, list, priority, due_date, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?)
       `)
 
-      stmt.run(id, todo.title, todo.list, todo.due_date || null, timestamp, timestamp)
+      stmt.run(id, todo.title, todo.list, todo.priority || null, todo.due_date || null, timestamp, timestamp)
 
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 
@@ -888,6 +910,10 @@ export const db = {
       if (updates.list !== undefined) {
         fields.push('list = ?')
         values.push(updates.list)
+      }
+      if (updates.priority !== undefined) {
+        fields.push('priority = ?')
+        values.push(updates.priority)
       }
       if (updates.due_date !== undefined) {
         fields.push('due_date = ?')

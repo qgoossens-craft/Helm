@@ -20,6 +20,7 @@ export interface Task {
   title: string
   description: string | null
   status: 'todo' | 'in_progress' | 'done'
+  priority: 'low' | 'medium' | 'high' | null
   order: number
   created_at: string
   updated_at: string
@@ -105,6 +106,7 @@ export interface QuickTodo {
   id: string
   title: string
   list: 'personal' | 'work' | 'tweaks'
+  priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
   completed: boolean
   completed_at: string | null
@@ -206,7 +208,7 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:getOverdue'),
     create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:create', todo),
-    update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>): Promise<QuickTodo> =>
+    update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:update', id, updates),
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('db:quickTodos:delete', id)
@@ -300,7 +302,7 @@ declare global {
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
       }
       obsidian: {

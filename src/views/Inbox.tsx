@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench } from 'lucide-react'
 import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
+import { PriorityIndicator } from '../components/PriorityIndicator'
+import { PrioritySelector } from '../components/PrioritySelector'
+import type { Priority } from '../lib/priorityConstants'
 
 export function Inbox() {
   const [newItem, setNewItem] = useState('')
@@ -111,11 +114,13 @@ export function Inbox() {
               <InboxItem
                 key={task.id}
                 title={task.title}
+                priority={task.priority}
                 completed={false}
                 createdAt={formatDate(task.created_at)}
                 onToggle={() => handleToggleComplete(task.id, task.status)}
                 onMove={() => openMoveToProject(task.id)}
                 onDelete={() => handleDelete(task.id)}
+                onPriorityChange={(priority) => updateTask(task.id, { priority })}
               />
             ))}
 
@@ -128,11 +133,13 @@ export function Inbox() {
                   <InboxItem
                     key={task.id}
                     title={task.title}
+                    priority={task.priority}
                     completed={true}
                     createdAt={formatDate(task.created_at)}
                     onToggle={() => handleToggleComplete(task.id, task.status)}
                     onMove={() => openMoveToProject(task.id)}
                     onDelete={() => handleDelete(task.id)}
+                    onPriorityChange={(priority) => updateTask(task.id, { priority })}
                   />
                 ))}
               </>
@@ -159,14 +166,16 @@ function EmptyState() {
 
 interface InboxItemProps {
   title: string
+  priority: Priority | null
   completed: boolean
   createdAt: string
   onToggle: () => void
   onMove: () => void
   onDelete: () => void
+  onPriorityChange: (priority: Priority | null) => void
 }
 
-function InboxItem({ title, completed, createdAt, onToggle, onMove, onDelete }: InboxItemProps) {
+function InboxItem({ title, priority, completed, createdAt, onToggle, onMove, onDelete, onPriorityChange }: InboxItemProps) {
   const [isCompleting, setIsCompleting] = useState(false)
 
   const handleToggle = () => {
@@ -203,19 +212,23 @@ function InboxItem({ title, completed, createdAt, onToggle, onMove, onDelete }: 
       >
         {(completed || isCompleting) && <Check size={14} className={isCompleting ? 'animate-check-pop' : ''} />}
       </button>
+      <PriorityIndicator priority={priority} />
       <div className="flex-1 min-w-0">
         <p className={`truncate ${completed || isCompleting ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{title}</p>
         <p className="text-xs text-helm-text-muted">{createdAt}</p>
       </div>
-      <div className={`flex gap-2 transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+      <div className={`flex gap-1 items-center transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
         {!completed && !isCompleting && (
-          <button
-            onClick={onMove}
-            className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
-            title="Move to project"
-          >
-            <ArrowRight size={16} />
-          </button>
+          <>
+            <PrioritySelector priority={priority} onPriorityChange={onPriorityChange} />
+            <button
+              onClick={onMove}
+              className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
+              title="Move to project"
+            >
+              <ArrowRight size={16} />
+            </button>
+          </>
         )}
         <button
           onClick={onDelete}
