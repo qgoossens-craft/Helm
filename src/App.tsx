@@ -5,6 +5,7 @@ import { Inbox } from './views/Inbox'
 import { Project } from './views/Project'
 import { Focus } from './views/Focus'
 import { Todos } from './views/Todos'
+import { DayView } from './views/DayView'
 import { Settings } from './views/Settings'
 import { KickoffWizard } from './components/KickoffWizard'
 import { CopilotModal } from './components/CopilotModal'
@@ -19,6 +20,7 @@ function App() {
           <Route path="project/:id" element={<Project />} />
           <Route path="focus" element={<Focus />} />
           <Route path="todos" element={<Todos />} />
+          <Route path="day/:date" element={<DayView />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

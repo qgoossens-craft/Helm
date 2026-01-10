@@ -5,6 +5,7 @@ import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
 import { QuickSwitcher } from './QuickSwitcher'
 import { useDoubleTapCmd } from '../hooks/useDoubleTapCmd'
 import { ObsidianBrowserModal } from './ObsidianBrowserModal'
+import { CalendarWidget } from './CalendarWidget'
 import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
 
 export function Layout() {
@@ -130,7 +131,17 @@ export function Layout() {
           )}
         </nav>
 
-        {/* Bottom section */}
+        {/* Calendar Widget - Fixed at bottom */}
+        <div className="border-t border-helm-border">
+          <div className="pt-3 pb-1 px-4">
+            <span className="text-xs font-medium text-helm-text-muted uppercase tracking-wider">
+              Calendar
+            </span>
+          </div>
+          <CalendarWidget />
+        </div>
+
+        {/* Settings link */}
         <div className="p-2 border-t border-helm-border">
           <NavLink
             to="/settings"
