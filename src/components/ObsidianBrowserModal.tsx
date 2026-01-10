@@ -89,7 +89,8 @@ export function ObsidianBrowserModal() {
       const result = await window.api.obsidian.importFiles(
         Array.from(selectedFiles),
         obsidianBrowserContext.projectId,
-        obsidianBrowserContext.taskId
+        obsidianBrowserContext.taskId,
+        obsidianBrowserContext.quickTodoId
       )
 
       if (result.failed > 0) {

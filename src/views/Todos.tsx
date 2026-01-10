@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Trash2, Calendar, Check } from 'lucide-react'
 import { useQuickTodosStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
+import { QuickTodoDetailPanel } from '../components/QuickTodoDetailPanel'
 import type { QuickTodo } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
@@ -11,6 +12,7 @@ type TodoList = 'personal' | 'work' | 'tweaks'
 export function Todos() {
   const [activeList, setActiveList] = useState<TodoList>('personal')
   const [newTodo, setNewTodo] = useState('')
+  const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { todos, fetchAll, createTodo, updateTodo, deleteTodo, toggleComplete } = useQuickTodosStore()
@@ -18,6 +20,12 @@ export function Todos() {
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
+
+  // Get the selected todo from the store (always up-to-date)
+  const selectedTodo = useMemo(() => {
+    if (!selectedTodoId) return null
+    return todos.find(t => t.id === selectedTodoId) ?? null
+  }, [todos, selectedTodoId])
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -76,9 +84,11 @@ export function Todos() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl">
-      <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold text-helm-text mb-6">Quick Todos</h1>
+    <div className="h-full flex gap-3">
+      {/* Main content */}
+      <div className="flex-1 overflow-auto p-6 bg-helm-surface rounded-2xl">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-2xl font-semibold text-helm-text mb-6">Quick Todos</h1>
 
       {/* List tabs */}
       <div className="flex gap-2 mb-6">
@@ -137,46 +147,59 @@ export function Todos() {
         </div>
       </form>
 
-      {/* Todo list */}
-      <div className="space-y-2">
-        {incompleteTodos.length === 0 && completedTodos.length === 0 ? (
-          <EmptyState list={activeList} />
-        ) : (
-          <>
-            {incompleteTodos.map((todo) => (
-              <TodoItem
-                key={todo.id}
-                todo={todo}
-                onToggle={() => handleToggle(todo.id)}
-                onDelete={() => handleDelete(todo.id)}
-                onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
-                onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
-              />
-            ))}
-
-            {completedTodos.length > 0 && (
+          {/* Todo list */}
+          <div className="space-y-2">
+            {incompleteTodos.length === 0 && completedTodos.length === 0 ? (
+              <EmptyState list={activeList} />
+            ) : (
               <>
-                <div className="pt-4 pb-2">
-                  <span className="text-xs text-helm-text-muted uppercase tracking-wider">
-                    Completed
-                  </span>
-                </div>
-                {completedTodos.map((todo) => (
+                {incompleteTodos.map((todo) => (
                   <TodoItem
                     key={todo.id}
                     todo={todo}
+                    isSelected={selectedTodo?.id === todo.id}
+                    onSelect={() => setSelectedTodoId(todo.id)}
                     onToggle={() => handleToggle(todo.id)}
                     onDelete={() => handleDelete(todo.id)}
                     onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
                     onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
                   />
                 ))}
+
+                {completedTodos.length > 0 && (
+                  <>
+                    <div className="pt-4 pb-2">
+                      <span className="text-xs text-helm-text-muted uppercase tracking-wider">
+                        Completed
+                      </span>
+                    </div>
+                    {completedTodos.map((todo) => (
+                      <TodoItem
+                        key={todo.id}
+                        todo={todo}
+                        isSelected={selectedTodo?.id === todo.id}
+                        onSelect={() => setSelectedTodoId(todo.id)}
+                        onToggle={() => handleToggle(todo.id)}
+                        onDelete={() => handleDelete(todo.id)}
+                        onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
+                        onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
+                      />
+                    ))}
+                  </>
+                )}
               </>
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
-      </div>
+
+      {/* Detail Panel */}
+      {selectedTodo && (
+        <QuickTodoDetailPanel
+          todo={selectedTodo}
+          onClose={() => setSelectedTodoId(null)}
+        />
+      )}
     </div>
   )
 }
@@ -192,17 +215,20 @@ function EmptyState({ list }: { list: TodoList }) {
 
 interface TodoItemProps {
   todo: QuickTodo
+  isSelected: boolean
+  onSelect: () => void
   onToggle: () => void
   onDelete: () => void
   onSetDueDate: (date: string | null) => void
   onSetPriority: (priority: Priority | null) => void
 }
 
-function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: TodoItemProps) {
+function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate, onSetPriority }: TodoItemProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (!todo.completed) {
       // Completing: show animation first
       setIsCompleting(true)
@@ -213,6 +239,12 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: Tod
     } else {
       // Uncompleting: just toggle immediately
       onToggle()
+    }
+  }
+
+  const handleClick = () => {
+    if (!isCompleting) {
+      onSelect()
     }
   }
 
@@ -245,12 +277,15 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: Tod
 
   return (
     <div
-      className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up ${
-        todo.completed
-          ? 'border-helm-border/50 opacity-60'
+      onClick={handleClick}
+      className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up cursor-pointer transition-colors ${
+        isSelected
+          ? 'border-helm-primary bg-helm-primary/5'
+          : todo.completed
+          ? 'border-helm-border/50 opacity-60 hover:border-helm-border'
           : isOverdue
-          ? 'border-helm-error/50'
-          : 'border-helm-border'
+          ? 'border-helm-error/50 hover:border-helm-error'
+          : 'border-helm-border hover:border-helm-text-muted'
       } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
       {/* Checkbox */}
@@ -278,13 +313,13 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: Tod
 
       {/* Priority selector (on hover) */}
       {!todo.completed && !isCompleting && (
-        <div className={`transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+        <div onClick={(e) => e.stopPropagation()} className={`transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
           <PrioritySelector priority={todo.priority} onPriorityChange={onSetPriority} />
         </div>
       )}
 
       {/* Due date */}
-      <div className="relative">
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => setShowDatePicker(!showDatePicker)}
           disabled={isCompleting}
@@ -328,7 +363,7 @@ function TodoItem({ todo, onToggle, onDelete, onSetDueDate, onSetPriority }: Tod
 
       {/* Delete button */}
       <button
-        onClick={onDelete}
+        onClick={(e) => { e.stopPropagation(); onDelete() }}
         className={`p-2 text-helm-text-muted hover:text-helm-error transition-all ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
         title="Delete"
       >

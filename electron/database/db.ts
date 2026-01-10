@@ -157,6 +157,22 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE quick_todos ADD COLUMN priority TEXT DEFAULT NULL CHECK (priority IN ('low', 'medium', 'high'))`)
     console.log('Migration: Added priority column to quick_todos')
   }
+
+  // Migration: Add description column to quick_todos table
+  if (!quickTodosColumns.includes('description')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN description TEXT DEFAULT NULL`)
+    console.log('Migration: Added description column to quick_todos')
+  }
+
+  // Migration: Add quick_todo_id column to documents table
+  const documentsInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
+  const documentsColumns = documentsInfo.map(col => col.name)
+
+  if (!documentsColumns.includes('quick_todo_id')) {
+    db.exec(`ALTER TABLE documents ADD COLUMN quick_todo_id TEXT REFERENCES quick_todos(id) ON DELETE CASCADE`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_quick_todo ON documents(quick_todo_id)`)
+    console.log('Migration: Added quick_todo_id column to documents')
+  }
 }
 
 // Initialize database
@@ -276,6 +292,7 @@ interface Document {
   id: string
   project_id: string | null
   task_id: string | null
+  quick_todo_id: string | null
   name: string
   file_path: string
   file_type: string
@@ -308,6 +325,7 @@ interface SearchResult {
 interface QuickTodo {
   id: string
   title: string
+  description: string | null
   list: 'personal' | 'work' | 'tweaks'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
@@ -705,16 +723,16 @@ export const db = {
 
   // Documents
   documents: {
-    create(doc: { project_id: string | null; task_id: string | null; name: string; file_path: string; file_type: string; file_size: number }): Document {
+    create(doc: { project_id: string | null; task_id: string | null; quick_todo_id?: string | null; name: string; file_path: string; file_type: string; file_size: number }): Document {
       const id = generateId()
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO documents (id, project_id, task_id, name, file_path, file_type, file_size, processing_status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        INSERT INTO documents (id, project_id, task_id, quick_todo_id, name, file_path, file_type, file_size, processing_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
       `)
 
-      stmt.run(id, doc.project_id, doc.task_id, doc.name, doc.file_path, doc.file_type, doc.file_size, timestamp)
+      stmt.run(id, doc.project_id, doc.task_id, doc.quick_todo_id || null, doc.name, doc.file_path, doc.file_type, doc.file_size, timestamp)
 
       return this.getById(id)!
     },
@@ -731,6 +749,15 @@ export const db = {
         ORDER BY created_at DESC
       `)
       return stmt.all(taskId) as Document[]
+    },
+
+    getByQuickTodo(quickTodoId: string): Document[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM documents
+        WHERE quick_todo_id = ?
+        ORDER BY created_at DESC
+      `)
+      return stmt.all(quickTodoId) as Document[]
     },
 
     getByProject(projectId: string): Document[] {
@@ -893,21 +920,21 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO quick_todos (id, title, list, priority, due_date, completed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+        INSERT INTO quick_todos (id, title, description, list, priority, due_date, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
       `)
 
-      stmt.run(id, todo.title, todo.list, todo.priority || null, todo.due_date || null, timestamp, timestamp)
+      stmt.run(id, todo.title, todo.description || null, todo.list, todo.priority || null, todo.due_date || null, timestamp, timestamp)
 
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 
@@ -917,6 +944,10 @@ export const db = {
       if (updates.title !== undefined) {
         fields.push('title = ?')
         values.push(updates.title)
+      }
+      if (updates.description !== undefined) {
+        fields.push('description = ?')
+        values.push(updates.description)
       }
       if (updates.list !== undefined) {
         fields.push('list = ?')

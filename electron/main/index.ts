@@ -95,9 +95,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:documents:getById', (_, id: string) => db.documents.getById(id))
   ipcMain.handle('db:documents:getByTask', (_, taskId: string) => db.documents.getByTask(taskId))
   ipcMain.handle('db:documents:getByProject', (_, projectId: string) => db.documents.getByProject(projectId))
+  ipcMain.handle('db:documents:getByQuickTodo', (_, quickTodoId: string) => db.documents.getByQuickTodo(quickTodoId))
 
   // Document upload and processing
-  ipcMain.handle('documents:upload', async (_, taskId: string | null, projectId: string | null) => {
+  ipcMain.handle('documents:upload', async (_, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile'],
       filters: [
@@ -112,11 +113,11 @@ function registerIpcHandlers(): void {
     }
 
     const filePath = result.filePaths[0]
-    return documents.processUpload(filePath, taskId, projectId)
+    return documents.processUpload(filePath, taskId, projectId, quickTodoId)
   })
 
-  ipcMain.handle('documents:uploadFile', async (_, filePath: string, taskId: string | null, projectId: string | null) => {
-    return documents.processUpload(filePath, taskId, projectId)
+  ipcMain.handle('documents:uploadFile', async (_, filePath: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => {
+    return documents.processUpload(filePath, taskId, projectId, quickTodoId)
   })
 
   ipcMain.handle('documents:delete', async (_, documentId: string) => {
@@ -127,8 +128,8 @@ function registerIpcHandlers(): void {
     return documents.searchDocuments(query, { projectId, taskId })
   })
 
-  ipcMain.handle('documents:uploadFromClipboard', async (_, base64Data: string, mimeType: string, taskId: string | null, projectId: string | null) => {
-    return documents.processClipboardUpload(base64Data, mimeType, taskId, projectId)
+  ipcMain.handle('documents:uploadFromClipboard', async (_, base64Data: string, mimeType: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => {
+    return documents.processClipboardUpload(base64Data, mimeType, taskId, projectId, quickTodoId)
   })
 
   ipcMain.handle('documents:getFilePath', async (_, documentId: string) => {
@@ -195,8 +196,8 @@ function registerIpcHandlers(): void {
     return documents.listObsidianFiles(vaultPath)
   })
 
-  ipcMain.handle('obsidian:importFiles', async (_, filePaths: string[], projectId: string | null, taskId: string | null) => {
-    return documents.importObsidianFiles(filePaths, projectId, taskId)
+  ipcMain.handle('obsidian:importFiles', async (_, filePaths: string[], projectId: string | null, taskId: string | null, quickTodoId?: string | null) => {
+    return documents.importObsidianFiles(filePaths, projectId, taskId, quickTodoId)
   })
 }
 

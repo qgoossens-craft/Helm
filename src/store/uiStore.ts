@@ -23,6 +23,7 @@ interface UIState {
   obsidianBrowserContext: {
     projectId: string | null
     taskId: string | null
+    quickTodoId?: string | null
   } | null
 
   // Actions
@@ -34,7 +35,7 @@ interface UIState {
   closeMoveToProject: () => void
   openQuickSwitcher: () => void
   closeQuickSwitcher: () => void
-  openObsidianBrowser: (context: { projectId: string | null; taskId: string | null }) => void
+  openObsidianBrowser: (context: { projectId: string | null; taskId: string | null; quickTodoId?: string | null }) => void
   closeObsidianBrowser: () => void
 }
 

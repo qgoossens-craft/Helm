@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench } from 'lucide-react'
 import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
+import { TaskDetailPanel } from '../components/TaskDetailPanel'
+import type { Task } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
 export function Inbox() {
   const [newItem, setNewItem] = useState('')
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { inboxTasks, fetchInbox, createTask, updateTask, deleteTask } = useTasksStore()
   const { projects, fetchProjects } = useProjectsStore()
@@ -16,6 +19,12 @@ export function Inbox() {
     fetchInbox()
     fetchProjects()
   }, [fetchInbox, fetchProjects])
+
+  // Get the selected task from the store (always up-to-date)
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null
+    return inboxTasks.find(t => t.id === selectedTaskId) ?? null
+  }, [inboxTasks, selectedTaskId])
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -77,80 +86,92 @@ export function Inbox() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6 bg-helm-surface rounded-2xl">
-      <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold text-helm-text mb-6">Inbox</h1>
+    <div className="h-full flex gap-3">
+      {/* Main content */}
+      <div className="flex-1 overflow-auto p-6 bg-helm-surface rounded-2xl">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-2xl font-semibold text-helm-text mb-6">Inbox</h1>
 
-      {/* Quick capture input */}
-      <form onSubmit={handleAddItem} className="mb-6">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Plus size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-helm-text-muted" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Add item..."
-              className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-3 bg-helm-primary hover:bg-helm-primary-hover text-white rounded-lg transition-colors"
-          >
-            Add
-          </button>
-        </div>
-      </form>
+          {/* Quick capture input */}
+          <form onSubmit={handleAddItem} className="mb-6">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Plus size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-helm-text-muted" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  placeholder="Add item..."
+                  className="w-full pl-10 pr-4 py-3 bg-helm-surface border border-helm-border rounded-lg text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none transition-colors"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-3 bg-helm-primary hover:bg-helm-primary-hover text-white rounded-lg transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          </form>
 
-      {/* Inbox items */}
-      <div className="space-y-2">
-        {incompleteItems.length === 0 && completedItems.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            {incompleteItems.map((task) => (
-              <InboxItem
-                key={task.id}
-                title={task.title}
-                priority={task.priority}
-                completed={false}
-                createdAt={formatDate(task.created_at)}
-                onToggle={() => handleToggleComplete(task.id, task.status)}
-                onMove={() => openMoveToProject(task.id)}
-                onDelete={() => handleDelete(task.id)}
-                onPriorityChange={(priority) => updateTask(task.id, { priority })}
-              />
-            ))}
-
-            {completedItems.length > 0 && (
+          {/* Inbox items */}
+          <div className="space-y-2">
+            {incompleteItems.length === 0 && completedItems.length === 0 ? (
+              <EmptyState />
+            ) : (
               <>
-                <p className="text-xs font-medium text-helm-text-muted uppercase tracking-wider pt-4 pb-2">
-                  Completed
-                </p>
-                {completedItems.map((task) => (
+                {incompleteItems.map((task) => (
                   <InboxItem
                     key={task.id}
-                    title={task.title}
-                    priority={task.priority}
-                    completed={true}
+                    task={task}
+                    isSelected={selectedTask?.id === task.id}
                     createdAt={formatDate(task.created_at)}
+                    onSelect={() => setSelectedTaskId(task.id)}
                     onToggle={() => handleToggleComplete(task.id, task.status)}
                     onMove={() => openMoveToProject(task.id)}
                     onDelete={() => handleDelete(task.id)}
                     onPriorityChange={(priority) => updateTask(task.id, { priority })}
                   />
                 ))}
+
+                {completedItems.length > 0 && (
+                  <>
+                    <p className="text-xs font-medium text-helm-text-muted uppercase tracking-wider pt-4 pb-2">
+                      Completed
+                    </p>
+                    {completedItems.map((task) => (
+                      <InboxItem
+                        key={task.id}
+                        task={task}
+                        isSelected={selectedTask?.id === task.id}
+                        createdAt={formatDate(task.created_at)}
+                        onSelect={() => setSelectedTaskId(task.id)}
+                        onToggle={() => handleToggleComplete(task.id, task.status)}
+                        onMove={() => openMoveToProject(task.id)}
+                        onDelete={() => handleDelete(task.id)}
+                        onPriorityChange={(priority) => updateTask(task.id, { priority })}
+                      />
+                    ))}
+                  </>
+                )}
               </>
             )}
-          </>
-        )}
+          </div>
+
+          {/* Move to project modal */}
+          <MoveToProjectModal projects={projects.filter((p) => !p.archived_at)} />
+        </div>
       </div>
 
-      {/* Move to project modal */}
-      <MoveToProjectModal projects={projects.filter((p) => !p.archived_at)} />
-      </div>
+      {/* Detail Panel */}
+      {selectedTask && (
+        <TaskDetailPanel
+          task={selectedTask}
+          projectId={null}
+          onClose={() => setSelectedTaskId(null)}
+        />
+      )}
     </div>
   )
 }
@@ -165,20 +186,22 @@ function EmptyState() {
 }
 
 interface InboxItemProps {
-  title: string
-  priority: Priority | null
-  completed: boolean
+  task: Task
+  isSelected: boolean
   createdAt: string
+  onSelect: () => void
   onToggle: () => void
   onMove: () => void
   onDelete: () => void
   onPriorityChange: (priority: Priority | null) => void
 }
 
-function InboxItem({ title, priority, completed, createdAt, onToggle, onMove, onDelete, onPriorityChange }: InboxItemProps) {
+function InboxItem({ task, isSelected, createdAt, onSelect, onToggle, onMove, onDelete, onPriorityChange }: InboxItemProps) {
   const [isCompleting, setIsCompleting] = useState(false)
+  const completed = task.status === 'done'
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (!completed) {
       // Completing: show animation first
       setIsCompleting(true)
@@ -192,12 +215,21 @@ function InboxItem({ title, priority, completed, createdAt, onToggle, onMove, on
     }
   }
 
+  const handleClick = () => {
+    if (!isCompleting) {
+      onSelect()
+    }
+  }
+
   return (
     <div
-      className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up ${
-        completed
-          ? 'border-helm-border/50 opacity-60'
-          : 'border-helm-border'
+      onClick={handleClick}
+      className={`flex items-center gap-3 p-4 bg-helm-surface border rounded-lg group animate-slide-up cursor-pointer transition-colors ${
+        isSelected
+          ? 'border-helm-primary bg-helm-primary/5'
+          : completed
+          ? 'border-helm-border/50 opacity-60 hover:border-helm-border'
+          : 'border-helm-border hover:border-helm-text-muted'
       } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
       <button
@@ -212,17 +244,17 @@ function InboxItem({ title, priority, completed, createdAt, onToggle, onMove, on
       >
         {(completed || isCompleting) && <Check size={14} className={isCompleting ? 'animate-check-pop' : ''} />}
       </button>
-      <PriorityIndicator priority={priority} />
+      <PriorityIndicator priority={task.priority} />
       <div className="flex-1 min-w-0">
-        <p className={`truncate ${completed || isCompleting ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{title}</p>
+        <p className={`truncate ${completed || isCompleting ? 'line-through text-helm-text-muted' : 'text-helm-text'}`}>{task.title}</p>
         <p className="text-xs text-helm-text-muted">{createdAt}</p>
       </div>
       <div className={`flex gap-1 items-center transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
         {!completed && !isCompleting && (
           <>
-            <PrioritySelector priority={priority} onPriorityChange={onPriorityChange} />
+            <PrioritySelector priority={task.priority} onPriorityChange={onPriorityChange} />
             <button
-              onClick={onMove}
+              onClick={(e) => { e.stopPropagation(); onMove() }}
               className="p-2 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
               title="Move to project"
             >
@@ -231,7 +263,7 @@ function InboxItem({ title, priority, completed, createdAt, onToggle, onMove, on
           </>
         )}
         <button
-          onClick={onDelete}
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
           className="p-2 text-helm-text-muted hover:text-helm-error hover:bg-helm-surface-elevated rounded transition-colors"
           title="Delete"
         >

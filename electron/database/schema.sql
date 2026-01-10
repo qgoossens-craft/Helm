@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
     project_id TEXT,
     task_id TEXT,
+    quick_todo_id TEXT,
     name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
@@ -96,7 +97,8 @@ CREATE TABLE IF NOT EXISTS documents (
     extracted_text TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (quick_todo_id) REFERENCES quick_todos(id) ON DELETE CASCADE
 );
 
 -- Document chunks for RAG
@@ -116,6 +118,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 CREATE TABLE IF NOT EXISTS quick_todos (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    description TEXT,
     list TEXT NOT NULL DEFAULT 'personal'
         CHECK (list IN ('personal', 'work', 'tweaks')),
     priority TEXT DEFAULT NULL
@@ -137,6 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
 CREATE INDEX IF NOT EXISTS idx_projects_context ON projects(context);
 CREATE INDEX IF NOT EXISTS idx_documents_task ON documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_quick_todo ON documents(quick_todo_id);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_quick_todos_list ON quick_todos(list);

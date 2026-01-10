@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar } from 'lucide-react'
+import { X, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useTasksStore, useUIStore, useSettingsStore } from '../store'
+import { useQuickTodosStore, useUIStore, useSettingsStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
-import { PRIORITY_LEVELS, type Priority } from '../lib/priorityConstants'
-import type { Task, Document } from '../types/global'
+import type { QuickTodo, Document } from '../types/global'
 
 interface PreviewState {
   isOpen: boolean
@@ -19,21 +18,15 @@ interface RenameState {
   name: string
 }
 
-interface TaskDetailPanelProps {
-  task: Task
+interface QuickTodoDetailPanelProps {
+  todo: QuickTodo
   onClose: () => void
-  projectId?: string | null
 }
 
-export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelProps) {
-  const [title, setTitle] = useState(task.title)
-  const [description, setDescription] = useState(task.description || '')
-  const [status, setStatus] = useState(task.status)
+export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProps) {
+  const [title, setTitle] = useState(todo.title)
+  const [description, setDescription] = useState(todo.description || '')
   const [documents, setDocuments] = useState<Document[]>([])
-  const [subtasks, setSubtasks] = useState<Task[]>([])
-  const [newSubtask, setNewSubtask] = useState('')
-  const [isAddingSubtask, setIsAddingSubtask] = useState(false)
-  const [showSubtasks, setShowSubtasks] = useState(true)
   const [showDocuments, setShowDocuments] = useState(true)
   const [, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -47,11 +40,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     documentId: null,
     name: ''
   })
-  const [dueDate, setDueDate] = useState<string | null>(task.due_date)
+  const [dueDate, setDueDate] = useState<string | null>(todo.due_date)
   const [showDatePicker, setShowDatePicker] = useState(false)
-  const [priority, setPriority] = useState<Priority | null>(task.priority)
 
-  const { tasks, updateTask, createTask, deleteTask } = useTasksStore()
+  const { updateTodo } = useQuickTodosStore()
   const { openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
   const { settings } = useSettingsStore()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -59,44 +51,36 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const wasObsidianBrowserOpen = useRef(false)
 
   useEffect(() => {
-    setTitle(task.title)
-    setDescription(task.description || '')
-    setStatus(task.status)
-    setDueDate(task.due_date)
-    setPriority(task.priority)
-    // Auto-resize title textarea after task changes
+    setTitle(todo.title)
+    setDescription(todo.description || '')
+    setDueDate(todo.due_date)
+    // Auto-resize title textarea after todo changes
     if (titleRef.current) {
       titleRef.current.style.height = 'auto'
       titleRef.current.style.height = titleRef.current.scrollHeight + 'px'
     }
-  }, [task])
-
-
-  useEffect(() => {
-    const filtered = tasks.filter((t) => t.parent_task_id === task.id)
-    setSubtasks(filtered)
-  }, [tasks, task.id])
+  }, [todo])
 
   useEffect(() => {
     async function fetchDocuments() {
       try {
-        const docs = await window.api.documents.getByTask(task.id)
+        const docs = await window.api.documents.getByQuickTodo(todo.id)
         setDocuments(docs)
       } catch (err) {
         console.error('Failed to fetch documents:', err)
       }
     }
     fetchDocuments()
-  }, [task.id])
+  }, [todo.id])
 
   // Refetch documents when Obsidian browser closes (after import)
   useEffect(() => {
     if (wasObsidianBrowserOpen.current && !isObsidianBrowserOpen) {
       // Modal just closed, refetch documents
-      window.api.documents.getByTask(task.id).then(setDocuments).catch(console.error)
+      window.api.documents.getByQuickTodo(todo.id).then(setDocuments).catch(console.error)
     }
     wasObsidianBrowserOpen.current = isObsidianBrowserOpen
-  }, [isObsidianBrowserOpen, task.id])
+  }, [isObsidianBrowserOpen, todo.id])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -113,7 +97,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, status])
+  }, [title, description])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -130,33 +114,22 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, status, onClose, preview.isOpen])
+  }, [title, description, onClose, preview.isOpen])
 
   const handleSave = async () => {
-    if (title === task.title && description === (task.description || '') && status === task.status) {
+    if (title === todo.title && description === (todo.description || '')) {
       return
     }
     setIsSaving(true)
     try {
-      await updateTask(task.id, {
-        title: title.trim() || task.title,
-        description: description.trim() || null,
-        status
+      await updateTodo(todo.id, {
+        title: title.trim() || todo.title,
+        description: description.trim() || null
       })
     } catch (err) {
-      console.error('Failed to save task:', err)
+      console.error('Failed to save todo:', err)
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleStatusChange = async (newStatus: Task['status']) => {
-    setStatus(newStatus)
-    try {
-      await updateTask(task.id, { status: newStatus })
-    } catch (err) {
-      console.error('Failed to update status:', err)
-      setStatus(task.status)
     }
   }
 
@@ -164,20 +137,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     setDueDate(date)
     setShowDatePicker(false)
     try {
-      await updateTask(task.id, { due_date: date })
+      await updateTodo(todo.id, { due_date: date })
     } catch (err) {
       console.error('Failed to update due date:', err)
-      setDueDate(task.due_date)
-    }
-  }
-
-  const handlePriorityChange = async (newPriority: Priority | null) => {
-    setPriority(newPriority)
-    try {
-      await updateTask(task.id, { priority: newPriority })
-    } catch (err) {
-      console.error('Failed to update priority:', err)
-      setPriority(task.priority)
+      setDueDate(todo.due_date)
     }
   }
 
@@ -196,44 +159,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
-  const isOverdue = dueDate && status !== 'done' && new Date(dueDate) < new Date(new Date().toDateString())
-
-  const handleAddSubtask = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newSubtask.trim()) return
-
-    try {
-      await createTask({
-        project_id: projectId,
-        parent_task_id: task.id,
-        title: newSubtask.trim(),
-        description: null,
-        status: 'todo',
-        order: subtasks.length
-      })
-      setNewSubtask('')
-      setIsAddingSubtask(false)
-    } catch (err) {
-      console.error('Failed to add subtask:', err)
-    }
-  }
-
-  const handleToggleSubtask = async (subtask: Task) => {
-    try {
-      const newStatus = subtask.status === 'done' ? 'todo' : 'done'
-      await updateTask(subtask.id, { status: newStatus })
-    } catch (err) {
-      console.error('Failed to update subtask:', err)
-    }
-  }
-
-  const handleDeleteSubtask = async (subtaskId: string) => {
-    try {
-      await deleteTask(subtaskId)
-    } catch (err) {
-      console.error('Failed to delete subtask:', err)
-    }
-  }
+  const isOverdue = dueDate && !todo.completed && new Date(dueDate) < new Date(new Date().toDateString())
 
   const handleDeleteDocument = async (docId: string) => {
     try {
@@ -247,14 +173,14 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
   const handleUploadDocument = async () => {
     setIsUploading(true)
     try {
-      const result = await window.api.documents.upload(task.id, projectId ?? null)
+      const result = await window.api.documents.upload(null, null, todo.id)
       if (result === null) {
         // User cancelled the dialog
         return
       }
       if (result.success) {
         // Fetch updated document list
-        const docs = await window.api.documents.getByTask(task.id)
+        const docs = await window.api.documents.getByQuickTodo(todo.id)
         setDocuments(docs)
         // Poll for processing completion
         pollDocumentStatus(result.documentId)
@@ -380,20 +306,16 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const statusOptions: { value: Task['status']; label: string; color: string }[] = [
-    { value: 'todo', label: 'To Do', color: 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border' },
-    { value: 'in_progress', label: 'In Progress', color: 'bg-helm-primary/20 text-helm-primary border border-helm-primary/30' },
-    { value: 'done', label: 'Done', color: 'bg-helm-success/20 text-helm-success border border-helm-success/30' }
-  ]
-
-  const priorityOptions: { value: Priority | null; label: string; activeColor: string }[] = [
-    { value: null, label: 'None', activeColor: 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border' },
-    { value: 'low', label: PRIORITY_LEVELS.low.label, activeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30' },
-    { value: 'medium', label: PRIORITY_LEVELS.medium.label, activeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30' },
-    { value: 'high', label: PRIORITY_LEVELS.high.label, activeColor: 'bg-red-500/20 text-red-400 border border-red-500/30' }
-  ]
-
-  const completedSubtasks = subtasks.filter((s) => s.status === 'done').length
+  const getListLabel = (list: QuickTodo['list']) => {
+    switch (list) {
+      case 'personal':
+        return 'Personal'
+      case 'work':
+        return 'Work'
+      case 'tweaks':
+        return 'Tweaks'
+    }
+  }
 
   return (
     <div
@@ -402,7 +324,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-helm-border">
-        <span className="text-xs text-helm-text-muted">Task Details</span>
+        <span className="text-xs text-helm-text-muted">Todo Details</span>
         <button
           onClick={() => {
             handleSave()
@@ -430,52 +352,18 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             onBlur={handleSave}
             rows={1}
             className="w-full text-lg font-medium text-helm-text bg-transparent border-none outline-none focus:ring-0 placeholder:text-helm-text-muted resize-none overflow-hidden"
-            placeholder="Task title..."
+            placeholder="Todo title..."
           />
         </div>
 
-        {/* Status */}
+        {/* List */}
         <div>
           <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
-            Status
+            List
           </label>
-          <div className="flex gap-2">
-            {statusOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => handleStatusChange(opt.value)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  status === opt.value
-                    ? opt.color
-                    : 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border hover:text-helm-text hover:border-helm-text-muted'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Priority */}
-        <div>
-          <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
-            Priority
-          </label>
-          <div className="flex gap-2">
-            {priorityOptions.map((opt) => (
-              <button
-                key={opt.value ?? 'none'}
-                onClick={() => handlePriorityChange(opt.value)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  priority === opt.value
-                    ? opt.activeColor
-                    : 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border hover:text-helm-text hover:border-helm-text-muted'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <span className="px-3 py-1.5 rounded text-xs font-medium bg-helm-surface-elevated text-helm-text border border-helm-border">
+            {getListLabel(todo.list)}
+          </span>
         </div>
 
         {/* Due Date */}
@@ -534,86 +422,6 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             autoFocus
           />
         </div>
-
-        {/* Subtasks - only show when task belongs to a project */}
-        {projectId && (
-          <div>
-            <button
-              onClick={() => setShowSubtasks(!showSubtasks)}
-              className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
-            >
-              {showSubtasks ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              Subtasks
-              {subtasks.length > 0 && (
-                <span className="text-helm-text-muted">
-                  ({completedSubtasks}/{subtasks.length})
-                </span>
-              )}
-            </button>
-
-            {showSubtasks && (
-              <div className="space-y-2">
-                {subtasks.map((subtask) => (
-                  <div
-                    key={subtask.id}
-                    className="flex items-center gap-2 p-2 bg-helm-bg border border-helm-border rounded-lg group"
-                  >
-                    <button
-                      onClick={() => handleToggleSubtask(subtask)}
-                      className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                        subtask.status === 'done'
-                          ? 'bg-helm-primary border-helm-primary text-white'
-                          : 'border-helm-border hover:border-helm-primary'
-                      }`}
-                    >
-                      {subtask.status === 'done' && <Check size={10} />}
-                    </button>
-                    <span
-                      className={`flex-1 text-sm truncate ${
-                        subtask.status === 'done' ? 'text-helm-text-muted line-through' : 'text-helm-text'
-                      }`}
-                    >
-                      {subtask.title}
-                    </span>
-                    <button
-                      onClick={() => handleDeleteSubtask(subtask.id)}
-                      className="p-1 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-
-                {isAddingSubtask ? (
-                  <form onSubmit={handleAddSubtask} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newSubtask}
-                      onChange={(e) => setNewSubtask(e.target.value)}
-                      placeholder="Subtask title..."
-                      autoFocus
-                      className="flex-1 px-3 py-1.5 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 bg-helm-primary hover:bg-helm-primary-hover text-white text-sm rounded-lg transition-colors"
-                    >
-                      Add
-                    </button>
-                  </form>
-                ) : (
-                  <button
-                    onClick={() => setIsAddingSubtask(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full"
-                  >
-                    <Plus size={14} />
-                    Add subtask
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Documents */}
         <div>
@@ -744,7 +552,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
                 </button>
                 {settings.obsidian_vault_path && (
                   <button
-                    onClick={() => openObsidianBrowser({ projectId: projectId ?? null, taskId: task.id })}
+                    onClick={() => openObsidianBrowser({ projectId: null, taskId: null, quickTodoId: todo.id })}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors"
                     title="Import from Obsidian"
                   >
@@ -760,8 +568,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       {/* Footer */}
       <div className="p-4 border-t border-helm-border">
         <p className="text-xs text-helm-text-muted">
-          Created {new Date(task.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-          {task.completed_at && ` · Completed ${new Date(task.completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}`}
+          Created {new Date(todo.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+          {todo.completed_at && ` · Completed ${new Date(todo.completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}`}
         </p>
       </div>
 

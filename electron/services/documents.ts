@@ -174,7 +174,8 @@ async function generateEmbedding(text: string): Promise<Float32Array | null> {
 export async function processUpload(
   sourcePath: string,
   taskId: string | null,
-  projectId: string | null
+  projectId: string | null,
+  quickTodoId?: string | null
 ): Promise<ProcessResult> {
   const fileName = basename(sourcePath)
   const fileType = getFileType(sourcePath)
@@ -189,6 +190,7 @@ export async function processUpload(
   const document = db.documents.create({
     project_id: projectId,
     task_id: taskId,
+    quick_todo_id: quickTodoId ?? null,
     name: fileName,
     file_path: '', // Will update after copying
     file_type: fileType,
@@ -354,7 +356,8 @@ export async function processClipboardUpload(
   base64Data: string,
   mimeType: string,
   taskId: string | null,
-  projectId: string | null
+  projectId: string | null,
+  quickTodoId?: string | null
 ): Promise<ProcessResult> {
   // Determine file extension from mime type
   const extMap: Record<string, string> = {
@@ -393,6 +396,7 @@ export async function processClipboardUpload(
     const document = db.documents.create({
       project_id: projectId,
       task_id: taskId,
+      quick_todo_id: quickTodoId ?? null,
       name: fileName,
       file_path: '',
       file_type: mimeType,
@@ -499,7 +503,8 @@ export function listObsidianFiles(vaultPath: string): VaultFile[] {
 export async function importObsidianFiles(
   filePaths: string[],
   projectId: string | null,
-  taskId: string | null
+  taskId: string | null,
+  quickTodoId?: string | null
 ): Promise<{ imported: number; failed: number; errors: Array<{ file: string; error: string }> }> {
   const results = {
     imported: 0,
@@ -508,7 +513,7 @@ export async function importObsidianFiles(
   }
 
   for (const filePath of filePaths) {
-    const result = await processUpload(filePath, taskId, projectId)
+    const result = await processUpload(filePath, taskId, projectId, quickTodoId)
     if (result.success) {
       results.imported++
     } else {

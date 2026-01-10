@@ -59,6 +59,7 @@ export interface Document {
   id: string
   project_id: string | null
   task_id: string | null
+  quick_todo_id: string | null
   name: string
   file_path: string
   file_type: string
@@ -106,6 +107,7 @@ export interface ObsidianImportResult {
 export interface QuickTodo {
   id: string
   title: string
+  description: string | null
   list: 'personal' | 'work' | 'tweaks'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
@@ -177,12 +179,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:documents:getByTask', taskId),
     getByProject: (projectId: string): Promise<Document[]> =>
       ipcRenderer.invoke('db:documents:getByProject', projectId),
-    upload: (taskId: string | null, projectId: string | null): Promise<UploadResult | null> =>
-      ipcRenderer.invoke('documents:upload', taskId, projectId),
-    uploadFile: (filePath: string, taskId: string | null, projectId: string | null): Promise<UploadResult> =>
-      ipcRenderer.invoke('documents:uploadFile', filePath, taskId, projectId),
-    uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null): Promise<UploadResult> =>
-      ipcRenderer.invoke('documents:uploadFromClipboard', base64Data, mimeType, taskId, projectId),
+    getByQuickTodo: (quickTodoId: string): Promise<Document[]> =>
+      ipcRenderer.invoke('db:documents:getByQuickTodo', quickTodoId),
+    upload: (taskId: string | null, projectId: string | null, quickTodoId?: string | null): Promise<UploadResult | null> =>
+      ipcRenderer.invoke('documents:upload', taskId, projectId, quickTodoId),
+    uploadFile: (filePath: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null): Promise<UploadResult> =>
+      ipcRenderer.invoke('documents:uploadFile', filePath, taskId, projectId, quickTodoId),
+    uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null): Promise<UploadResult> =>
+      ipcRenderer.invoke('documents:uploadFromClipboard', base64Data, mimeType, taskId, projectId, quickTodoId),
     getFilePath: (documentId: string): Promise<string | null> =>
       ipcRenderer.invoke('documents:getFilePath', documentId),
     getDataUrl: (documentId: string): Promise<string | null> =>
@@ -207,9 +211,9 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:getDueToday'),
     getOverdue: (): Promise<QuickTodo[]> =>
       ipcRenderer.invoke('db:quickTodos:getOverdue'),
-    create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }): Promise<QuickTodo> =>
+    create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:create', todo),
-    update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): Promise<QuickTodo> =>
+    update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:update', id, updates),
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('db:quickTodos:delete', id)
@@ -231,8 +235,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('obsidian:selectVaultPath'),
     listFiles: (vaultPath: string): Promise<VaultFile[]> =>
       ipcRenderer.invoke('obsidian:listFiles', vaultPath),
-    importFiles: (filePaths: string[], projectId: string | null, taskId: string | null): Promise<ObsidianImportResult> =>
-      ipcRenderer.invoke('obsidian:importFiles', filePaths, projectId, taskId)
+    importFiles: (filePaths: string[], projectId: string | null, taskId: string | null, quickTodoId?: string | null): Promise<ObsidianImportResult> =>
+      ipcRenderer.invoke('obsidian:importFiles', filePaths, projectId, taskId, quickTodoId)
   },
 
   // Event listeners for shortcuts
@@ -283,9 +287,10 @@ declare global {
         getById: (id: string) => Promise<Document | null>
         getByTask: (taskId: string) => Promise<Document[]>
         getByProject: (projectId: string) => Promise<Document[]>
-        upload: (taskId: string | null, projectId: string | null) => Promise<UploadResult | null>
-        uploadFile: (filePath: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
-        uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null) => Promise<UploadResult>
+        getByQuickTodo: (quickTodoId: string) => Promise<Document[]>
+        upload: (taskId: string | null, projectId: string | null, quickTodoId?: string | null) => Promise<UploadResult | null>
+        uploadFile: (filePath: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => Promise<UploadResult>
+        uploadFromClipboard: (base64Data: string, mimeType: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => Promise<UploadResult>
         getFilePath: (documentId: string) => Promise<string | null>
         getDataUrl: (documentId: string) => Promise<string | null>
         rename: (documentId: string, newName: string) => Promise<void>
@@ -302,14 +307,14 @@ declare global {
         getById: (id: string) => Promise<QuickTodo | null>
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
-        create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
       }
       obsidian: {
         selectVaultPath: () => Promise<string | null>
         listFiles: (vaultPath: string) => Promise<VaultFile[]>
-        importFiles: (filePaths: string[], projectId: string | null, taskId: string | null) => Promise<ObsidianImportResult>
+        importFiles: (filePaths: string[], projectId: string | null, taskId: string | null, quickTodoId?: string | null) => Promise<ObsidianImportResult>
       }
       onShortcut: (channel: string, callback: () => void) => () => void
     }
