@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, X, RotateCcw, Sparkles, Calendar } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
@@ -35,7 +35,7 @@ export function Project() {
   const { projects, fetchProjects, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
   const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask } = useTasksStore()
-  const { openCopilot } = useUIStore()
+  const { openCopilot, openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
 
   useEffect(() => {
     fetchProjects()
@@ -79,7 +79,8 @@ export function Project() {
       }
     }
     fetchDocuments()
-  }, [id])
+    // Refetch when Obsidian browser closes (after import)
+  }, [id, isObsidianBrowserOpen])
 
   const project = projects.find((p) => p.id === id)
   const projectTasks = tasks.filter((t) => t.project_id === id && !t.parent_task_id)
@@ -295,9 +296,13 @@ export function Project() {
     }
   }
 
-  const getFileIcon = (fileType: string) => {
+  const getFileIcon = (fileType: string, fileName?: string) => {
     if (fileType.startsWith('image/')) return <Image size={14} />
     if (fileType.includes('pdf') || fileType.includes('document')) return <FileText size={14} />
+    // Show Obsidian icon for markdown files
+    if (fileType === 'text/markdown' || fileName?.endsWith('.md')) {
+      return <BookOpen size={14} className="text-purple-500" />
+    }
     return <File size={14} />
   }
 
@@ -516,7 +521,7 @@ export function Project() {
                         : 'border-helm-border'
                     }`}
                   >
-                    <span className="text-helm-text-muted flex-shrink-0">{getFileIcon(doc.file_type)}</span>
+                    <span className="text-helm-text-muted flex-shrink-0">{getFileIcon(doc.file_type, doc.name)}</span>
                     <div className="flex-1 min-w-0">
                       <p
                         className={`text-xs text-helm-text truncate ${
@@ -562,23 +567,32 @@ export function Project() {
                   </div>
                 ))}
 
-                <button
-                  onClick={handleUploadDocument}
-                  disabled={isUploading}
-                  className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs text-helm-text-muted hover:text-helm-text bg-helm-bg hover:bg-helm-surface-elevated border border-dashed border-helm-border rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 size={12} className="animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Plus size={12} />
-                      Add project document
-                    </>
-                  )}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUploadDocument}
+                    disabled={isUploading}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs text-helm-text-muted hover:text-helm-text bg-helm-bg hover:bg-helm-surface-elevated border border-dashed border-helm-border rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={12} />
+                        Add document
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => openObsidianBrowser({ projectId: id || null, taskId: null })}
+                    className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-helm-text-muted hover:text-helm-text bg-helm-bg hover:bg-purple-500/10 border border-dashed border-helm-border hover:border-purple-500/50 rounded-lg transition-colors"
+                    title="Import from Obsidian"
+                  >
+                    <BookOpen size={12} className="text-purple-500" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -631,21 +645,13 @@ export function Project() {
       </aside>
       )}
 
-      {/* Document Preview Modal */}
+      {/* Document Preview Modal - Click backdrop or press Escape to close */}
       {preview.isOpen && preview.dataUrl && (
         <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-8"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-8 cursor-pointer"
           onClick={closePreview}
         >
-          {/* X button positioned at top-right of viewport */}
-          <button
-            onClick={closePreview}
-            className="fixed top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors z-[101]"
-          >
-            <X size={24} />
-          </button>
-
-          <div className="max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+          <div className="max-w-full max-h-full flex flex-col items-center cursor-default" onClick={(e) => e.stopPropagation()}>
             {/* Image preview */}
             {preview.fileType.startsWith('image/') && (
               <img
@@ -905,6 +911,8 @@ interface KanbanViewProps {
 }
 
 function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewProps) {
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+
   const columns: { id: Task['status']; title: string }[] = [
     { id: 'todo', title: 'To Do' },
     { id: 'in_progress', title: 'In Progress' },
@@ -913,6 +921,11 @@ function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewPro
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('taskId', taskId)
+    setDraggingId(taskId)
+  }
+
+  const handleDragEnd = () => {
+    setDraggingId(null)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -925,6 +938,7 @@ function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewPro
     if (taskId) {
       onUpdateStatus(taskId, status)
     }
+    setDraggingId(null)
   }
 
   return (
@@ -934,27 +948,33 @@ function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewPro
         return (
           <div
             key={column.id}
-            className="flex-1 min-w-0 bg-helm-surface rounded-lg p-4 flex flex-col"
+            className="flex-1 min-w-0 bg-helm-surface rounded-lg p-4 flex flex-col border-2 border-helm-primary/30"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, column.id)}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-helm-text">{column.title}</h3>
-              <span className="text-xs text-helm-text-muted bg-helm-surface-elevated px-2 py-0.5 rounded">
+              <span className="text-xs font-medium bg-helm-primary/10 text-helm-primary px-2 py-0.5 rounded-full">
                 {columnTasks.length}
               </span>
             </div>
             <div className="space-y-2 flex-1 min-h-32">
               {columnTasks.length === 0 ? (
-                <p className="text-sm text-helm-text-muted text-center py-8">
-                  No tasks
-                </p>
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="w-10 h-10 rounded-full bg-helm-primary/5 flex items-center justify-center mb-2">
+                    <Plus size={18} className="text-helm-primary/40" />
+                  </div>
+                  <p className="text-sm text-helm-text-muted">No tasks yet</p>
+                  <p className="text-xs text-helm-text-muted/60 mt-1">Drag a task here</p>
+                </div>
               ) : (
                 columnTasks.map((task) => (
                   <KanbanCard
                     key={task.id}
                     task={task}
+                    isDragging={draggingId === task.id}
                     onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
                     onDelete={onDelete}
                     onSelect={onSelect}
                   />
@@ -970,18 +990,21 @@ function KanbanView({ tasks, onUpdateStatus, onDelete, onSelect }: KanbanViewPro
 
 interface KanbanCardProps {
   task: Task
+  isDragging: boolean
   onDragStart: (e: React.DragEvent, taskId: string) => void
+  onDragEnd: () => void
   onDelete: (id: string) => void
   onSelect: (task: Task) => void
 }
 
-function KanbanCard({ task, onDragStart, onDelete, onSelect }: KanbanCardProps) {
+function KanbanCard({ task, isDragging, onDragStart, onDragEnd, onDelete, onSelect }: KanbanCardProps) {
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
+      onDragEnd={onDragEnd}
       onClick={() => onSelect(task)}
-      className="p-3 bg-helm-bg border border-helm-border rounded-lg cursor-grab active:cursor-grabbing group hover:border-helm-primary transition-colors"
+      className={`p-3 bg-helm-bg border border-helm-border rounded-lg cursor-grab active:cursor-grabbing group shadow-sm hover:shadow-md hover:border-l-2 hover:border-l-helm-primary transition-all ${isDragging ? 'opacity-0' : ''}`}
     >
       <div className="flex items-center gap-2">
         <PriorityIndicator priority={task.priority} />
