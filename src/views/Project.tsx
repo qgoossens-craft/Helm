@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe, Tag } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -46,7 +46,7 @@ export function Project() {
 
   const { projects, fetchProjects, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
-  const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask, projectCategories, fetchCategoriesByProject } = useTasksStore()
+  const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask, projectCategories, fetchCategoriesByProject, createCategory } = useTasksStore()
   const { openCopilot, openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
 
   useEffect(() => {
@@ -537,6 +537,8 @@ export function Project() {
             onCategoryChange={handleCategoryChange}
             projectCategories={projectCategories}
             isDeleted={taskFilter === 'deleted'}
+            projectId={id!}
+            onCreateCategory={createCategory}
           />
         ) : (
           <KanbanView
@@ -998,11 +1000,28 @@ interface CategoryGroupProps {
   onCategoryChange: (id: string, category: string | null) => void
   projectCategories: string[]
   isDeleted: boolean
+  // Drag and drop props
+  onDragOver?: (e: React.DragEvent) => void
+  onDragEnter?: (e: React.DragEvent) => void
+  onDragLeave?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent) => void
+  isDragOver?: boolean
+  onTaskDragStart?: (e: React.DragEvent, taskId: string) => void
+  onTaskDragEnd?: () => void
+  draggingTaskId?: string | null
 }
 
-function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: CategoryGroupProps) {
+function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, onDragOver, onDragEnter, onDragLeave, onDrop, isDragOver, onTaskDragStart, onTaskDragEnd, draggingTaskId }: CategoryGroupProps) {
   return (
-    <div className="space-y-1">
+    <div
+      className={`space-y-1 rounded-lg transition-all ${
+        isDragOver ? 'bg-helm-primary/10 ring-2 ring-helm-primary/30' : ''
+      }`}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div
         onClick={onToggleCollapse}
         className="flex items-center gap-2 text-sm font-medium text-helm-text-muted hover:text-helm-text transition-colors w-full py-1 cursor-pointer select-none"
@@ -1036,6 +1055,10 @@ function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggl
               onCategoryChange={onCategoryChange}
               projectCategories={projectCategories}
               isDeleted={isDeleted}
+              draggable={!isDeleted}
+              onDragStart={onTaskDragStart}
+              onDragEnd={onTaskDragEnd}
+              isDragging={draggingTaskId === task.id}
             />
           ))}
         </div>
@@ -1055,15 +1078,79 @@ interface ListViewProps {
   onCategoryChange: (id: string, category: string | null) => void
   projectCategories: string[]
   isDeleted: boolean
+  projectId: string
+  onCreateCategory: (projectId: string, categoryName: string) => void
 }
 
-function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, projectId, onCreateCategory }: ListViewProps) {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean
+    position: { x: number; y: number }
+    mode: 'menu' | 'input'
+    inputValue: string
+  } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('taskId', taskId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingTaskId(taskId)
+  }
+
+  const handleDragEnd = () => {
+    setDraggingTaskId(null)
+    setDragOverCategory(null)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDragEnter = (e: React.DragEvent, categoryKey: string) => {
+    e.preventDefault()
+    setDragOverCategory(categoryKey)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    const target = e.currentTarget as HTMLElement
+    const related = e.relatedTarget as HTMLElement
+    if (!target.contains(related)) {
+      setDragOverCategory(null)
+    }
+  }
+
+  const handleCategoryDrop = async (e: React.DragEvent, category: string | null) => {
+    e.preventDefault()
+    const taskId = e.dataTransfer.getData('taskId')
+
+    if (taskId) {
+      const task = tasks.find(t => t.id === taskId)
+      if (task && task.category !== category) {
+        await onCategoryChange(taskId, category)
+      }
+    }
+
+    setDraggingTaskId(null)
+    setDragOverCategory(null)
+  }
 
   const groupedTasks = useMemo(() => {
     const groups: Record<string, Task[]> = {}
     const uncategorized: Task[] = []
 
+    // Initialize groups for all known categories (including empty ones)
+    projectCategories.forEach(category => {
+      groups[category] = []
+    })
+
+    // Populate groups with tasks
     tasks.forEach(task => {
       if (task.category) {
         if (!groups[task.category]) groups[task.category] = []
@@ -1075,7 +1162,7 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
 
     const sortedCategories = Object.keys(groups).sort()
     return { groups, uncategorized, sortedCategories }
-  }, [tasks])
+  }, [tasks, projectCategories])
 
   const toggleCategory = (category: string) => {
     setCollapsedCategories(prev => {
@@ -1089,18 +1176,120 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
     })
   }
 
+  // Context menu handlers
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Only trigger if not clicking on a task item
+    const target = e.target as HTMLElement
+    if (target.closest('[data-task-item]')) {
+      return
+    }
+
+    e.preventDefault()
+
+    // Calculate position with viewport boundary adjustment
+    const menuWidth = 180
+    const menuHeight = 40 // Approximate height for menu mode
+    let x = e.clientX
+    let y = e.clientY
+
+    if (x + menuWidth > window.innerWidth) {
+      x = window.innerWidth - menuWidth - 8
+    }
+    if (y + menuHeight > window.innerHeight) {
+      y = window.innerHeight - menuHeight - 8
+    }
+
+    setContextMenu({
+      visible: true,
+      position: { x, y },
+      mode: 'menu',
+      inputValue: ''
+    })
+  }
+
+  const handleNewCategoryClick = () => {
+    setContextMenu(prev => prev ? { ...prev, mode: 'input' } : null)
+    // Focus input after state update
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const handleCreateCategory = () => {
+    if (contextMenu?.inputValue.trim()) {
+      onCreateCategory(projectId, contextMenu.inputValue.trim())
+      setContextMenu(null)
+    }
+  }
+
+  const handleContextMenuKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setContextMenu(null)
+    } else if (e.key === 'Enter' && contextMenu?.mode === 'input') {
+      handleCreateCategory()
+    }
+  }
+
+  // Click-outside detection for context menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+
+    if (contextMenu?.visible) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [contextMenu?.visible])
+
   if (tasks.length === 0) {
     return (
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y-2" onContextMenu={handleContextMenu}>
         <div className="text-center py-12 text-helm-text-muted">
           <p>{isDeleted ? 'No deleted tasks.' : 'No tasks yet. Add your first task above.'}</p>
         </div>
+
+        {/* Context menu */}
+        {contextMenu?.visible && (
+          <div
+            ref={contextMenuRef}
+            className="fixed bg-helm-surface-elevated border border-helm-border rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+            style={{ left: contextMenu.position.x, top: contextMenu.position.y }}
+            onKeyDown={handleContextMenuKeyDown}
+          >
+            {contextMenu.mode === 'menu' ? (
+              <button
+                onClick={handleNewCategoryClick}
+                className="w-full px-3 py-2 text-left text-sm text-helm-text hover:bg-helm-bg transition-colors flex items-center gap-2"
+              >
+                <Plus size={14} className="text-helm-primary" />
+                New Category
+              </button>
+            ) : (
+              <div className="px-3 py-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={contextMenu.inputValue}
+                  onChange={(e) => setContextMenu(prev => prev ? { ...prev, inputValue: e.target.value } : null)}
+                  onKeyDown={handleContextMenuKeyDown}
+                  placeholder="Category name..."
+                  className="w-full px-2 py-1.5 text-sm bg-helm-bg border border-helm-border rounded text-helm-text placeholder-helm-text-muted focus:outline-none focus:border-helm-primary"
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="flex-1 space-y-2">
+    <div className="flex-1 space-y-2" onContextMenu={handleContextMenu}>
       {/* Categorized tasks */}
       {groupedTasks.sortedCategories.map(category => (
         <CategoryGroup
@@ -1118,6 +1307,14 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
           onCategoryChange={onCategoryChange}
           projectCategories={projectCategories}
           isDeleted={isDeleted}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, category)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleCategoryDrop(e, category)}
+          isDragOver={dragOverCategory === category}
+          onTaskDragStart={handleDragStart}
+          onTaskDragEnd={handleDragEnd}
+          draggingTaskId={draggingTaskId}
         />
       ))}
 
@@ -1137,7 +1334,48 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
           onCategoryChange={onCategoryChange}
           projectCategories={projectCategories}
           isDeleted={isDeleted}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, 'uncategorized')}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleCategoryDrop(e, null)}
+          isDragOver={dragOverCategory === 'uncategorized'}
+          onTaskDragStart={handleDragStart}
+          onTaskDragEnd={handleDragEnd}
+          draggingTaskId={draggingTaskId}
         />
+      )}
+
+      {/* Context menu */}
+      {contextMenu?.visible && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-helm-surface-elevated border border-helm-border rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+          style={{ left: contextMenu.position.x, top: contextMenu.position.y }}
+          onKeyDown={handleContextMenuKeyDown}
+        >
+          {contextMenu.mode === 'menu' ? (
+            <button
+              onClick={handleNewCategoryClick}
+              className="w-full px-3 py-2 text-left text-sm text-helm-text hover:bg-helm-bg transition-colors flex items-center gap-2"
+            >
+              <Plus size={14} className="text-helm-primary" />
+              New Category
+            </button>
+          ) : (
+            <div className="px-3 py-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={contextMenu.inputValue}
+                onChange={(e) => setContextMenu(prev => prev ? { ...prev, inputValue: e.target.value } : null)}
+                onKeyDown={handleContextMenuKeyDown}
+                placeholder="Category name..."
+                className="w-full px-2 py-1.5 text-sm bg-helm-bg border border-helm-border rounded text-helm-text placeholder-helm-text-muted focus:outline-none focus:border-helm-primary"
+                autoFocus
+              />
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
@@ -1154,9 +1392,14 @@ interface TaskRowProps {
   onCategoryChange: (id: string, category: string | null) => void
   projectCategories: string[]
   isDeleted: boolean
+  // Drag props
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent, taskId: string) => void
+  onDragEnd?: () => void
+  isDragging?: boolean
 }
 
-function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, draggable, onDragStart, onDragEnd, isDragging }: TaskRowProps) {
   const [isCompleting, setIsCompleting] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -1204,10 +1447,14 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
 
   return (
     <div
+      data-task-item
+      draggable={draggable}
+      onDragStart={(e) => onDragStart?.(e, task.id)}
+      onDragEnd={onDragEnd}
       onClick={() => !isDeleted && !isCompleting && onSelect(task)}
       className={`grid grid-cols-[auto_auto_1fr_auto_5rem] items-center gap-2 px-3 py-2.5 bg-helm-surface border rounded-lg group animate-slide-up transition-colors relative z-0 hover:z-10 ${
         isDeleted ? 'border-helm-border/50 opacity-60' : isOverdue ? 'border-helm-error/50 cursor-pointer hover:border-helm-primary' : 'border-helm-border cursor-pointer hover:border-helm-primary'
-      } ${isCompleting ? 'animate-complete-out' : ''}`}
+      } ${isCompleting ? 'animate-complete-out' : ''} ${isDragging ? 'opacity-50' : ''} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       {/* Column 1: Checkbox */}
       <div className="w-5">

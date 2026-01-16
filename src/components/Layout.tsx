@@ -131,11 +131,6 @@ export function Layout() {
 
         {/* Calendar Widget - Fixed at bottom */}
         <div className="border-t border-helm-border">
-          <div className="pt-3 pb-1 px-4">
-            <span className="text-xs font-medium text-helm-text-muted uppercase tracking-wider">
-              Calendar
-            </span>
-          </div>
           <CalendarWidget />
         </div>
 

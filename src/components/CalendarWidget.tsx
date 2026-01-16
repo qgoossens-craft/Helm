@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCalendarStore } from '../store/calendarStore'
 
@@ -14,6 +14,7 @@ interface CalendarDay {
   dateString: string
   isCurrentMonth: boolean
   isToday: boolean
+  isSelected: boolean
   itemCount: number
 }
 
@@ -27,9 +28,16 @@ function formatLocalDate(date: Date): string {
 
 export function CalendarWidget() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { fetchItems, getItemCountForDate, itemsByDate } = useCalendarStore()
 
   const [viewDate, setViewDate] = useState(() => new Date())
+
+  // Extract selected date from URL if on day view
+  const selectedDate = useMemo(() => {
+    const match = location.pathname.match(/^\/day\/(\d{4}-\d{2}-\d{2})$/)
+    return match ? match[1] : null
+  }, [location.pathname])
 
   // Fetch items on mount
   useEffect(() => {
@@ -74,6 +82,7 @@ export function CalendarWidget() {
         dateString,
         isCurrentMonth: current.getMonth() === month,
         isToday: dateWithoutTime.getTime() === today.getTime(),
+        isSelected: dateString === selectedDate,
         itemCount: getItemCountForDate(dateString)
       })
 
@@ -82,7 +91,7 @@ export function CalendarWidget() {
 
     return days
     // eslint-disable-next-line react-hooks/exhaustive-deps -- itemsByDate triggers re-render when store updates
-  }, [viewDate, getItemCountForDate, itemsByDate])
+  }, [viewDate, getItemCountForDate, itemsByDate, selectedDate])
 
   const goToPreviousMonth = () => {
     setViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -117,35 +126,35 @@ export function CalendarWidget() {
   }
 
   return (
-    <div className="px-2 py-3">
+    <div className="px-4 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 px-1">
+      <div className="flex items-center justify-between mb-4 px-1">
         <button
           onClick={goToPreviousMonth}
-          className="p-1 rounded hover:bg-helm-surface-elevated text-helm-text-muted hover:text-helm-text transition-colors"
+          className="p-2 rounded-lg hover:bg-helm-surface-elevated text-helm-text-muted hover:text-helm-text transition-colors"
         >
-          <ChevronLeft size={14} />
+          <ChevronLeft size={18} />
         </button>
         <button
           onClick={goToToday}
-          className="text-xs font-medium text-helm-text hover:text-helm-primary transition-colors"
+          className="text-sm font-medium text-helm-text hover:text-helm-primary transition-colors"
         >
           {MONTH_NAMES[viewDate.getMonth()]} {viewDate.getFullYear()}
         </button>
         <button
           onClick={goToNextMonth}
-          className="p-1 rounded hover:bg-helm-surface-elevated text-helm-text-muted hover:text-helm-text transition-colors"
+          className="p-2 rounded-lg hover:bg-helm-surface-elevated text-helm-text-muted hover:text-helm-text transition-colors"
         >
-          <ChevronRight size={14} />
+          <ChevronRight size={18} />
         </button>
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-2">
         {DAYS_OF_WEEK.map(day => (
           <div
             key={day}
-            className="text-center text-[10px] font-medium text-helm-text-muted py-1"
+            className="text-center text-[11px] font-medium text-helm-text-muted py-1.5"
           >
             {day}
           </div>
@@ -153,18 +162,20 @@ export function CalendarWidget() {
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-1">
         {calendarDays.map((day, index) => (
           <button
             key={index}
             onClick={() => handleDayClick(day)}
             className={`
-              relative flex flex-col items-center py-1 rounded text-xs transition-colors
+              relative flex flex-col items-center py-1.5 rounded-md text-xs transition-colors
               ${day.isToday
                 ? 'bg-helm-primary text-white font-medium'
-                : day.isCurrentMonth
-                  ? 'text-helm-text hover:bg-helm-surface-elevated'
-                  : 'text-helm-text-muted/50 hover:bg-helm-surface-elevated'
+                : day.isSelected
+                  ? 'ring-2 ring-helm-primary ring-inset text-helm-text font-medium'
+                  : day.isCurrentMonth
+                    ? 'text-helm-text hover:bg-helm-surface-elevated'
+                    : 'text-helm-text-muted/50 hover:bg-helm-surface-elevated'
               }
             `}
           >

@@ -14,6 +14,7 @@ interface TasksState {
   fetchInbox: () => Promise<void>
   fetchDeletedTasks: (projectId: string) => Promise<void>
   fetchCategoriesByProject: (projectId: string) => Promise<void>
+  createCategory: (projectId: string, categoryName: string) => void
   createTask: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at' | 'deleted_at'>) => Promise<Task>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
@@ -71,6 +72,18 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     } catch (error) {
       console.error('Failed to fetch categories:', error)
     }
+  },
+
+  createCategory: (projectId, categoryName) => {
+    // Add category to projectCategories if it doesn't exist
+    set((state) => {
+      if (state.projectCategories.includes(categoryName)) {
+        return state // Category already exists
+      }
+      return {
+        projectCategories: [...state.projectCategories, categoryName].sort()
+      }
+    })
   },
 
   createTask: async (taskData) => {
