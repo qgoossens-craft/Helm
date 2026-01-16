@@ -67,31 +67,58 @@ export function deleteStoredFile(documentId: string): void {
 // Extract text based on file type
 async function extractText(filePath: string, fileType: string): Promise<string> {
   const ext = extname(filePath).toLowerCase()
+  const fileSize = statSync(filePath).size
+  const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2)
 
   // PDF
   if (ext === '.pdf' || fileType === 'application/pdf') {
-    const buffer = readFileSync(filePath)
-    const result = await pdfParse(buffer)
-    return result.text
+    try {
+      console.log(`[Documents] Extracting text from PDF (${fileSizeMB}MB)...`)
+      const buffer = readFileSync(filePath)
+      console.log(`[Documents] PDF loaded into memory, parsing...`)
+      const result = await pdfParse(buffer)
+      console.log(`[Documents] PDF parsed successfully, extracted ${result.text.length} characters`)
+      return result.text
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`PDF extraction failed (${fileSizeMB}MB file): ${msg}`)
+    }
   }
 
   // Word DOCX
   if (ext === '.docx' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const result = await mammoth.extractRawText({ path: filePath })
-    return result.value
+    try {
+      console.log(`[Documents] Extracting text from DOCX (${fileSizeMB}MB)...`)
+      const result = await mammoth.extractRawText({ path: filePath })
+      return result.value
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`DOCX extraction failed (${fileSizeMB}MB file): ${msg}`)
+    }
   }
 
   // Plain text / Markdown
   if (['.txt', '.md', '.markdown'].includes(ext) || fileType.startsWith('text/')) {
-    return readFileSync(filePath, 'utf-8')
+    try {
+      return readFileSync(filePath, 'utf-8')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`Text file read failed (${fileSizeMB}MB file): ${msg}`)
+    }
   }
 
   // Images - OCR
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext) || fileType.startsWith('image/')) {
-    const result = await Tesseract.recognize(filePath, 'eng', {
-      logger: (m) => console.log(`OCR: ${m.status} ${Math.round((m.progress || 0) * 100)}%`)
-    })
-    return result.data.text
+    try {
+      console.log(`[Documents] Running OCR on image (${fileSizeMB}MB)...`)
+      const result = await Tesseract.recognize(filePath, 'eng', {
+        logger: (m) => console.log(`[Documents] OCR: ${m.status} ${Math.round((m.progress || 0) * 100)}%`)
+      })
+      return result.data.text
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(`OCR failed (${fileSizeMB}MB image): ${msg}`)
+    }
   }
 
   throw new Error(`Unsupported file type: ${fileType}`)

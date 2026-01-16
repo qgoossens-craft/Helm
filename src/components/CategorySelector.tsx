@@ -87,13 +87,12 @@ export function CategorySelector({
           e.stopPropagation()
           setIsOpen(!isOpen)
         }}
-        className="p-1 rounded hover:bg-helm-surface-elevated transition-colors"
+        className="p-1 rounded hover:bg-helm-surface-elevated transition-colors flex items-center justify-center"
         title={category ? `Category: ${category}` : 'Set category'}
       >
-        <Tag
-          size={14}
-          className="text-helm-primary"
-        />
+        <span className="pointer-events-none">
+          <Tag size={14} className="text-helm-primary" />
+        </span>
       </button>
 
       {isOpen && (

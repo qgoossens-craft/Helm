@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe, Tag } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useProjectsStore, useTasksStore, useUIStore } from '../store'
+import { useProjectsStore, useTasksStore, useUIStore, useCalendarStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
@@ -167,6 +167,10 @@ export function Project() {
     try {
       const newStatus = task.status === 'done' ? 'todo' : 'done'
       await updateTask(task.id, { status: newStatus })
+      // Refresh calendar to update dot count for this date
+      if (task.due_date) {
+        useCalendarStore.getState().fetchItems()
+      }
     } catch (err) {
       console.error('Failed to toggle task status:', err)
     }
@@ -207,6 +211,8 @@ export function Project() {
   const handleSetDueDate = async (taskId: string, date: string | null) => {
     try {
       await updateTask(taskId, { due_date: date })
+      // Refresh calendar to show/hide the dot for this date
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to set due date:', err)
     }
@@ -467,7 +473,7 @@ export function Project() {
               className={`px-3 py-1 text-xs rounded-full transition-colors ${
                 taskFilter === filter.value
                   ? 'bg-helm-primary text-white'
-                  : 'bg-helm-surface text-helm-text-muted hover:text-helm-text'
+                  : 'bg-helm-primary/10 text-helm-text-muted hover:text-helm-text hover:bg-helm-primary/20'
               }`}
             >
               {filter.label}
@@ -997,15 +1003,23 @@ interface CategoryGroupProps {
 function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: CategoryGroupProps) {
   return (
     <div className="space-y-1">
-      <button
+      <div
         onClick={onToggleCollapse}
-        className="flex items-center gap-2 text-sm font-medium text-helm-text-muted hover:text-helm-text transition-colors w-full py-1"
+        className="flex items-center gap-2 text-sm font-medium text-helm-text-muted hover:text-helm-text transition-colors w-full py-1 cursor-pointer select-none"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggleCollapse()
+          }
+        }}
       >
         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
         <Tag size={14} />
-        <span>{category || 'Uncategorized'}</span>
+        <span className="truncate">{category || 'Uncategorized'}</span>
         <span className="text-xs">({tasks.length})</span>
-      </button>
+      </div>
 
       {!isCollapsed && (
         <div className="space-y-1.5 pl-6">

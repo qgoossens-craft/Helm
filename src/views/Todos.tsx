@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Trash2, Calendar, Check } from 'lucide-react'
-import { useQuickTodosStore } from '../store'
+import { useQuickTodosStore, useCalendarStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
 import { QuickTodoDetailPanel } from '../components/QuickTodoDetailPanel'
@@ -54,6 +54,8 @@ export function Todos() {
   const handleToggle = async (id: string) => {
     try {
       await toggleComplete(id)
+      // Refresh calendar to update dot count
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to toggle todo:', err)
     }
@@ -70,6 +72,8 @@ export function Todos() {
   const handleSetDueDate = async (id: string, date: string | null) => {
     try {
       await updateTodo(id, { due_date: date })
+      // Refresh calendar to show/hide the dot for this date
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to set due date:', err)
     }

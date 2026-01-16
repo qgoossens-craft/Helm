@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Inbox, FolderKanban, ListTodo } from 'lucide-react'
-import { useUIStore, useTasksStore, useProjectsStore } from '../store'
+import { useUIStore, useTasksStore, useProjectsStore, useCalendarStore } from '../store'
 import type { Task } from '../types/global'
 
 
@@ -141,6 +141,8 @@ function QuickSwitcherContent({ onClose }: { onClose: () => void }) {
     try {
       const newStatus = result.status === 'done' ? 'todo' : 'done'
       await updateTask(result.id, { status: newStatus })
+      // Refresh calendar to update dot count
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to toggle task:', err)
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Plus, Trash2, ArrowRight, Check, FolderKanban, ListTodo, Briefcase, User, Wrench, ChevronDown, Inbox as InboxIcon } from 'lucide-react'
-import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore } from '../store'
+import { useTasksStore, useProjectsStore, useUIStore, useQuickTodosStore, useCalendarStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
@@ -91,6 +91,8 @@ export function Inbox() {
     try {
       const newStatus = currentStatus === 'done' ? 'todo' : 'done'
       await updateTask(id, { status: newStatus })
+      // Refresh calendar to update dot count
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to toggle complete:', err)
     }

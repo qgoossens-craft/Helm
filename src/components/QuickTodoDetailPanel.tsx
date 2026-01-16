@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useQuickTodosStore, useUIStore, useSettingsStore } from '../store'
+import { useQuickTodosStore, useUIStore, useSettingsStore, useCalendarStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
 import type { QuickTodo, Document, Source } from '../types/global'
 
@@ -169,6 +169,8 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     setShowDatePicker(false)
     try {
       await updateTodo(todo.id, { due_date: date })
+      // Refresh calendar to show/hide the dot for this date
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to update due date:', err)
       setDueDate(todo.due_date)

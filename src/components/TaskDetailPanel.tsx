@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useTasksStore, useUIStore, useSettingsStore } from '../store'
+import { useTasksStore, useUIStore, useSettingsStore, useCalendarStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
 import { CategorySelector } from './CategorySelector'
 import { PRIORITY_LEVELS, type Priority } from '../lib/priorityConstants'
@@ -191,6 +191,10 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     setStatus(newStatus)
     try {
       await updateTask(task.id, { status: newStatus })
+      // Refresh calendar to update dot count for this date
+      if (task.due_date) {
+        useCalendarStore.getState().fetchItems()
+      }
     } catch (err) {
       console.error('Failed to update status:', err)
       setStatus(task.status)
@@ -202,6 +206,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     setShowDatePicker(false)
     try {
       await updateTask(task.id, { due_date: date })
+      // Refresh calendar to show/hide the dot for this date
+      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to update due date:', err)
       setDueDate(task.due_date)
