@@ -22,6 +22,7 @@ export interface Task {
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
+  category: string | null
   order: number
   created_at: string
   updated_at: string
@@ -201,7 +202,9 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id: string): Promise<void> => ipcRenderer.invoke('db:tasks:delete', id),
     restore: (id: string): Promise<Task> => ipcRenderer.invoke('db:tasks:restore', id),
     reorder: (taskId: string, newOrder: number): Promise<void> =>
-      ipcRenderer.invoke('db:tasks:reorder', taskId, newOrder)
+      ipcRenderer.invoke('db:tasks:reorder', taskId, newOrder),
+    getCategoriesByProject: (projectId: string): Promise<string[]> =>
+      ipcRenderer.invoke('db:tasks:getCategoriesByProject', projectId)
   },
 
   // Activity Log
@@ -351,6 +354,7 @@ declare global {
         update: (id: string, updates: Partial<Task>) => Promise<Task>
         delete: (id: string) => Promise<void>
         reorder: (taskId: string, newOrder: number) => Promise<void>
+        getCategoriesByProject: (projectId: string) => Promise<string[]>
       }
       activity: {
         log: (entry: Omit<ActivityLogEntry, 'id' | 'created_at'>) => Promise<ActivityLogEntry>

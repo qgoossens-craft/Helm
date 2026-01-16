@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTasksStore, useUIStore, useSettingsStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
+import { CategorySelector } from './CategorySelector'
 import { PRIORITY_LEVELS, type Priority } from '../lib/priorityConstants'
 import type { Task, Document, Source } from '../types/global'
 
@@ -65,7 +66,7 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     source: null
   })
 
-  const { tasks, updateTask, createTask, deleteTask } = useTasksStore()
+  const { tasks, updateTask, createTask, deleteTask, projectCategories, fetchCategoriesByProject } = useTasksStore()
   const { openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
   const { settings } = useSettingsStore()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -85,6 +86,11 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
     }
   }, [task])
 
+  useEffect(() => {
+    if (task?.project_id) {
+      fetchCategoriesByProject(task.project_id)
+    }
+  }, [task?.project_id, fetchCategoriesByProject])
 
   useEffect(() => {
     const filtered = tasks.filter((t) => t.parent_task_id === task.id)
@@ -489,17 +495,8 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       className="w-80 h-full bg-helm-surface rounded-2xl flex flex-col animate-slide-in-right"
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-helm-border">
+      <div className="p-4 border-b border-helm-border">
         <span className="text-xs text-helm-text-muted">Task Details</span>
-        <button
-          onClick={() => {
-            handleSave()
-            onClose()
-          }}
-          className="p-1.5 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
-        >
-          <X size={18} />
-        </button>
       </div>
 
       {/* Content */}
@@ -565,6 +562,20 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             ))}
           </div>
         </div>
+
+        {/* Category - only show for project tasks */}
+        {task.project_id && (
+          <div>
+            <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+              Category
+            </label>
+            <CategorySelector
+              category={task.category}
+              projectCategories={projectCategories}
+              onCategoryChange={(category) => updateTask(task.id, { category })}
+            />
+          </div>
+        )}
 
         {/* Due Date */}
         <div>

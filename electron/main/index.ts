@@ -200,6 +200,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:tasks:getDeleted', (_, projectId: string) => db.tasks.getDeleted(projectId))
   ipcMain.handle('db:tasks:restore', (_, id: string) => db.tasks.restore(id))
   ipcMain.handle('db:tasks:reorder', (_, taskId: string, newOrder: number) => db.tasks.reorder(taskId, newOrder))
+  ipcMain.handle('db:tasks:getCategoriesByProject', (_, projectId: string) => db.tasks.getCategoriesByProject(projectId))
 
   // Activity Log
   ipcMain.handle('db:activity:log', (_, entry) => db.activityLog.log(entry))

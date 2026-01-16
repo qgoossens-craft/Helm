@@ -65,6 +65,13 @@ function runMigrations(db: Database.Database): void {
     console.log('Migration: Added due_date column to tasks')
   }
 
+  // Migration: Add category column to tasks table
+  if (!taskColumns.includes('category')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN category TEXT DEFAULT NULL`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(project_id, category)`)
+    console.log('Migration: Added category column to tasks')
+  }
+
   // Check if documents table exists and needs migration
   const tableInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>
   const columnNames = tableInfo.map(col => col.name)
@@ -285,6 +292,7 @@ interface Task {
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
+  category: string | null
   order: number
   created_at: string
   updated_at: string
@@ -628,6 +636,10 @@ export const db = {
         fields.push('due_date = ?')
         values.push(updates.due_date)
       }
+      if (updates.category !== undefined) {
+        fields.push('category = ?')
+        values.push(updates.category)
+      }
 
       fields.push('updated_at = ?')
       values.push(now())
@@ -662,6 +674,18 @@ export const db = {
 
       const updateStmt = getDb().prepare('UPDATE tasks SET "order" = ? WHERE id = ?')
       updateStmt.run(newOrder, taskId)
+    },
+
+    getCategoriesByProject(projectId: string): string[] {
+      const stmt = getDb().prepare(`
+        SELECT DISTINCT category FROM tasks
+        WHERE project_id = ?
+          AND category IS NOT NULL
+          AND deleted_at IS NULL
+        ORDER BY category ASC
+      `)
+      const rows = stmt.all(projectId) as Array<{ category: string }>
+      return rows.map(r => r.category)
     }
   },
 

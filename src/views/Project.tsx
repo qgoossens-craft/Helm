@@ -1,12 +1,13 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe, Tag } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore, useTasksStore, useUIStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
+import { CategorySelector } from '../components/CategorySelector'
 import type { Task, Document, Source, UrlMetadata } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
@@ -45,7 +46,7 @@ export function Project() {
 
   const { projects, fetchProjects, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
-  const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask } = useTasksStore()
+  const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask, projectCategories, fetchCategoriesByProject } = useTasksStore()
   const { openCopilot, openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
 
   useEffect(() => {
@@ -57,6 +58,12 @@ export function Project() {
       fetchTasksByProject(id)
     }
   }, [id, fetchTasksByProject])
+
+  useEffect(() => {
+    if (id) {
+      fetchCategoriesByProject(id)
+    }
+  }, [id, fetchCategoriesByProject])
 
   // Fetch deleted tasks when filter is selected
   useEffect(() => {
@@ -202,6 +209,14 @@ export function Project() {
       await updateTask(taskId, { due_date: date })
     } catch (err) {
       console.error('Failed to set due date:', err)
+    }
+  }
+
+  const handleCategoryChange = async (taskId: string, category: string | null) => {
+    await updateTask(taskId, { category })
+    // Refresh categories to include any new ones
+    if (id) {
+      fetchCategoriesByProject(id)
     }
   }
 
@@ -513,6 +528,8 @@ export function Project() {
             onSelect={setSelectedTask}
             onPriorityChange={handlePriorityChange}
             onSetDueDate={handleSetDueDate}
+            onCategoryChange={handleCategoryChange}
+            projectCategories={projectCategories}
             isDeleted={taskFilter === 'deleted'}
           />
         ) : (
@@ -961,6 +978,58 @@ export function Project() {
   )
 }
 
+interface CategoryGroupProps {
+  category: string | null
+  tasks: Task[]
+  isCollapsed: boolean
+  onToggleCollapse: () => void
+  onToggle: (task: Task) => void
+  onDelete: (id: string) => void
+  onRestore: (id: string) => void
+  onSelect: (task: Task) => void
+  onPriorityChange: (id: string, priority: Priority | null) => void
+  onSetDueDate: (id: string, date: string | null) => void
+  onCategoryChange: (id: string, category: string | null) => void
+  projectCategories: string[]
+  isDeleted: boolean
+}
+
+function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: CategoryGroupProps) {
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={onToggleCollapse}
+        className="flex items-center gap-2 text-sm font-medium text-helm-text-muted hover:text-helm-text transition-colors w-full py-1"
+      >
+        {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+        <Tag size={14} />
+        <span>{category || 'Uncategorized'}</span>
+        <span className="text-xs">({tasks.length})</span>
+      </button>
+
+      {!isCollapsed && (
+        <div className="space-y-1.5 pl-6">
+          {tasks.map(task => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              onRestore={onRestore}
+              onSelect={onSelect}
+              onPriorityChange={onPriorityChange}
+              onSetDueDate={onSetDueDate}
+              onCategoryChange={onCategoryChange}
+              projectCategories={projectCategories}
+              isDeleted={isDeleted}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface ListViewProps {
   tasks: Task[]
   onToggle: (task: Task) => void
@@ -969,10 +1038,43 @@ interface ListViewProps {
   onSelect: (task: Task) => void
   onPriorityChange: (id: string, priority: Priority | null) => void
   onSetDueDate: (id: string, date: string | null) => void
+  onCategoryChange: (id: string, category: string | null) => void
+  projectCategories: string[]
   isDeleted: boolean
 }
 
-function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, isDeleted }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: ListViewProps) {
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+
+  const groupedTasks = useMemo(() => {
+    const groups: Record<string, Task[]> = {}
+    const uncategorized: Task[] = []
+
+    tasks.forEach(task => {
+      if (task.category) {
+        if (!groups[task.category]) groups[task.category] = []
+        groups[task.category].push(task)
+      } else {
+        uncategorized.push(task)
+      }
+    })
+
+    const sortedCategories = Object.keys(groups).sort()
+    return { groups, uncategorized, sortedCategories }
+  }, [tasks])
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }
+
   if (tasks.length === 0) {
     return (
       <div className="flex-1 space-y-2">
@@ -984,10 +1086,45 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
   }
 
   return (
-    <div className="flex-1 space-y-2 overflow-y-auto">
-      {tasks.map((task) => (
-        <TaskRow key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} onRestore={onRestore} onSelect={onSelect} onPriorityChange={onPriorityChange} onSetDueDate={onSetDueDate} isDeleted={isDeleted} />
+    <div className="flex-1 space-y-2">
+      {/* Categorized tasks */}
+      {groupedTasks.sortedCategories.map(category => (
+        <CategoryGroup
+          key={category}
+          category={category}
+          tasks={groupedTasks.groups[category]}
+          isCollapsed={collapsedCategories.has(category)}
+          onToggleCollapse={() => toggleCategory(category)}
+          onToggle={onToggle}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          onSelect={onSelect}
+          onPriorityChange={onPriorityChange}
+          onSetDueDate={onSetDueDate}
+          onCategoryChange={onCategoryChange}
+          projectCategories={projectCategories}
+          isDeleted={isDeleted}
+        />
       ))}
+
+      {/* Uncategorized tasks */}
+      {groupedTasks.uncategorized.length > 0 && (
+        <CategoryGroup
+          category={null}
+          tasks={groupedTasks.uncategorized}
+          isCollapsed={collapsedCategories.has('__uncategorized__')}
+          onToggleCollapse={() => toggleCategory('__uncategorized__')}
+          onToggle={onToggle}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          onSelect={onSelect}
+          onPriorityChange={onPriorityChange}
+          onSetDueDate={onSetDueDate}
+          onCategoryChange={onCategoryChange}
+          projectCategories={projectCategories}
+          isDeleted={isDeleted}
+        />
+      )}
     </div>
   )
 }
@@ -1000,10 +1137,12 @@ interface TaskRowProps {
   onSelect: (task: Task) => void
   onPriorityChange: (id: string, priority: Priority | null) => void
   onSetDueDate: (id: string, date: string | null) => void
+  onCategoryChange: (id: string, category: string | null) => void
+  projectCategories: string[]
   isDeleted: boolean
 }
 
-function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, isDeleted }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted }: TaskRowProps) {
   const [isCompleting, setIsCompleting] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -1052,96 +1191,136 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
   return (
     <div
       onClick={() => !isDeleted && !isCompleting && onSelect(task)}
-      className={`flex items-center gap-3 p-3 bg-helm-surface border rounded-lg group animate-slide-up transition-colors ${
+      className={`grid grid-cols-[auto_auto_1fr_auto_5rem] items-center gap-2 px-3 py-2.5 bg-helm-surface border rounded-lg group animate-slide-up transition-colors relative z-0 hover:z-10 ${
         isDeleted ? 'border-helm-border/50 opacity-60' : isOverdue ? 'border-helm-error/50 cursor-pointer hover:border-helm-primary' : 'border-helm-border cursor-pointer hover:border-helm-primary'
       } ${isCompleting ? 'animate-complete-out' : ''}`}
     >
-      {!isDeleted && (
-        <button
-          onClick={handleToggle}
-          disabled={isCompleting}
-          className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
-            task.status === 'done' || isCompleting
-              ? 'bg-helm-success border-helm-success text-white'
-              : 'border-helm-border hover:border-helm-primary'
-          }`}
-        >
-          {(task.status === 'done' || isCompleting) && (
-            <Check size={12} className={isCompleting ? 'animate-check-pop' : ''} />
-          )}
-        </button>
-      )}
-      <PriorityIndicator priority={task.priority} />
-      <span className={`flex-1 text-sm ${task.status === 'done' || isDeleted || isCompleting ? 'text-helm-text-muted line-through' : 'text-helm-text'}`}>
+      {/* Column 1: Checkbox */}
+      <div className="w-5">
+        {!isDeleted && (
+          <button
+            onClick={handleToggle}
+            disabled={isCompleting}
+            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+              task.status === 'done' || isCompleting
+                ? 'bg-helm-success border-helm-success text-white'
+                : 'border-helm-border hover:border-helm-primary'
+            }`}
+          >
+            {(task.status === 'done' || isCompleting) && (
+              <Check size={12} className={isCompleting ? 'animate-check-pop' : ''} />
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Column 2: Priority (fixed width to maintain alignment when empty) */}
+      <div className="w-2.5">
+        <PriorityIndicator priority={task.priority} />
+      </div>
+
+      {/* Column 3: Title (flexible) */}
+      <span className={`text-sm truncate ${task.status === 'done' || isDeleted || isCompleting ? 'text-helm-text-muted line-through' : 'text-helm-text'}`}>
         {task.title}
       </span>
-      {!isDeleted && task.status === 'in_progress' && !isCompleting && (
-        <span className="text-xs px-2 py-0.5 rounded bg-helm-primary/20 text-helm-primary">
-          In Progress
-        </span>
-      )}
-      {!isDeleted && task.status !== 'done' && !isCompleting && (
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <PrioritySelector priority={task.priority} onPriorityChange={(p) => onPriorityChange(task.id, p)} />
-          {/* Due date picker */}
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowDatePicker(!showDatePicker)
-              }}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                task.due_date
-                  ? isOverdue
-                    ? 'text-helm-error bg-helm-error/10'
-                    : 'text-helm-text-muted bg-helm-bg'
-                  : 'text-helm-text-muted hover:bg-helm-bg'
-              }`}
-              title="Set due date"
-            >
-              <Calendar size={12} />
-              {task.due_date ? formatDueDate(task.due_date) : 'Set date'}
-            </button>
 
-            {showDatePicker && (
-              <div className="absolute right-0 top-full mt-1 bg-helm-surface border border-helm-border rounded-lg shadow-lg p-2 z-10">
-                <input
-                  type="date"
-                  value={task.due_date || ''}
-                  onChange={(e) => {
-                    onSetDueDate(task.id, e.target.value || null)
-                    setShowDatePicker(false)
+      {/* Column 4: Status + Due date (auto width) */}
+      <div className="flex items-center gap-2 justify-end">
+        {!isDeleted && task.status === 'in_progress' && !isCompleting && (
+          <span className="text-xs px-2 py-0.5 rounded bg-helm-primary/20 text-helm-primary whitespace-nowrap">
+            In Progress
+          </span>
+        )}
+        {!isDeleted && task.due_date && task.status !== 'done' && !isCompleting && (
+          <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs group-hover:hidden whitespace-nowrap ${
+            isOverdue ? 'text-helm-error bg-helm-error/10' : 'text-helm-text-muted bg-helm-bg'
+          }`}>
+            <Calendar size={12} />
+            {formatDueDate(task.due_date)}
+          </div>
+        )}
+      </div>
+
+      {/* Column 5: Category (fixed width for alignment) */}
+      <div className="text-right">
+        {task.category && (
+          <span className="text-xs px-2 py-0.5 rounded bg-helm-primary/10 text-helm-primary inline-block">
+            {task.category}
+          </span>
+        )}
+      </div>
+
+      {/* Hover actions - absolutely positioned overlay */}
+      {!isDeleted && !isCompleting && (
+        <div
+          className="absolute right-24 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-helm-surface pl-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {task.status !== 'done' && (
+            <>
+              <PrioritySelector priority={task.priority} onPriorityChange={(p) => onPriorityChange(task.id, p)} />
+              <CategorySelector
+                category={task.category}
+                projectCategories={projectCategories}
+                onCategoryChange={(category) => onCategoryChange(task.id, category)}
+              />
+              {/* Due date picker */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowDatePicker(!showDatePicker)
                   }}
-                  className="bg-helm-bg border border-helm-border rounded px-2 py-1 text-sm text-helm-text"
-                  onClick={(e) => e.stopPropagation()}
-                />
-                {task.due_date && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSetDueDate(task.id, null)
-                      setShowDatePicker(false)
-                    }}
-                    className="block w-full mt-1 text-xs text-helm-text-muted hover:text-helm-error"
-                  >
-                    Clear date
-                  </button>
+                  className={`p-1 rounded transition-colors hover:bg-helm-surface-elevated ${
+                    isOverdue ? 'text-helm-error' : 'text-helm-primary'
+                  }`}
+                  title={task.due_date ? `Due: ${formatDueDate(task.due_date)}` : 'Set due date'}
+                >
+                  <Calendar size={14} />
+                </button>
+
+                {showDatePicker && (
+                  <div className="absolute right-0 top-full mt-1 bg-helm-surface border border-helm-border rounded-lg shadow-lg p-2 z-50">
+                    <input
+                      type="date"
+                      value={task.due_date || ''}
+                      onChange={(e) => {
+                        onSetDueDate(task.id, e.target.value || null)
+                        setShowDatePicker(false)
+                      }}
+                      className="bg-helm-bg border border-helm-border rounded px-2 py-1 text-sm text-helm-text"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {task.due_date && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSetDueDate(task.id, null)
+                          setShowDatePicker(false)
+                        }}
+                        className="block w-full mt-1 text-xs text-helm-text-muted hover:text-helm-error"
+                      >
+                        Clear date
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(task.id)
+            }}
+            className="p-1 text-helm-primary hover:text-helm-error transition-colors"
+            title="Delete"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       )}
-      {/* Show due date when not hovering (if set) */}
-      {!isDeleted && task.due_date && task.status !== 'done' && !isCompleting && (
-        <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs group-hover:hidden ${
-          isOverdue ? 'text-helm-error bg-helm-error/10' : 'text-helm-text-muted bg-helm-bg'
-        }`}>
-          <Calendar size={12} />
-          {formatDueDate(task.due_date)}
-        </div>
-      )}
-      {isDeleted ? (
+      {isDeleted && (
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -1151,17 +1330,6 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
           title="Restore"
         >
           <RotateCcw size={16} />
-        </button>
-      ) : (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete(task.id)
-          }}
-          className="p-1.5 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
-          title="Delete"
-        >
-          <Trash2 size={16} />
         </button>
       )}
     </div>

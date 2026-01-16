@@ -5,6 +5,7 @@ interface TasksState {
   tasks: Task[]
   inboxTasks: Task[]
   deletedTasks: Task[]
+  projectCategories: string[]
   isLoading: boolean
   error: string | null
 
@@ -12,6 +13,7 @@ interface TasksState {
   fetchTasksByProject: (projectId: string | null) => Promise<void>
   fetchInbox: () => Promise<void>
   fetchDeletedTasks: (projectId: string) => Promise<void>
+  fetchCategoriesByProject: (projectId: string) => Promise<void>
   createTask: (task: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'completed_at' | 'deleted_at'>) => Promise<Task>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
@@ -25,6 +27,7 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   tasks: [],
   inboxTasks: [],
   deletedTasks: [],
+  projectCategories: [],
   isLoading: false,
   error: null,
 
@@ -58,6 +61,15 @@ export const useTasksStore = create<TasksState>((set, get) => ({
       set({ deletedTasks })
     } catch (error) {
       console.error('Failed to fetch deleted tasks:', error)
+    }
+  },
+
+  fetchCategoriesByProject: async (projectId) => {
+    try {
+      const categories = await window.api.tasks.getCategoriesByProject(projectId)
+      set({ projectCategories: categories })
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
     }
   },
 

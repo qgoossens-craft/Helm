@@ -23,6 +23,7 @@ export interface Task {
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
+  category: string | null
   order: number
   created_at: string
   updated_at: string
@@ -195,6 +196,7 @@ declare global {
         delete: (id: string) => Promise<void>
         restore: (id: string) => Promise<Task>
         reorder: (taskId: string, newOrder: number) => Promise<void>
+        getCategoriesByProject: (projectId: string) => Promise<string[]>
       }
       activity: {
         log: (entry: Omit<ActivityLogEntry, 'id' | 'created_at'>) => Promise<ActivityLogEntry>

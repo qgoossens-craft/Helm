@@ -48,7 +48,7 @@ export function PrioritySelector({ priority, onPriorityChange, className = '' }:
         <Flag
           size={14}
           style={currentColor ? { color: currentColor } : undefined}
-          className={currentColor ? '' : 'text-helm-text-muted'}
+          className={currentColor ? '' : 'text-helm-primary'}
         />
       </button>
 
