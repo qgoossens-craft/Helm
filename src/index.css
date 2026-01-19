@@ -50,6 +50,34 @@
   font-weight: 600;
 }
 
+/* Copilot message markdown adjustments */
+.prose-helm p:first-child {
+  margin-top: 0;
+}
+
+.prose-helm p:last-child {
+  margin-bottom: 0;
+}
+
+/* Task list checkbox styling for GFM */
+.prose-helm input[type='checkbox'] {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--color-helm-border);
+  border-radius: 0.25rem;
+  background: var(--color-helm-bg);
+  cursor: default;
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+
+.prose-helm input[type='checkbox']:checked {
+  background: var(--color-helm-primary);
+  border-color: var(--color-helm-primary);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+}
+
 /* Custom theme variables for Helm */
 @theme {
   /* Default colors (Obsidian theme) - hardcoded for Tailwind build */

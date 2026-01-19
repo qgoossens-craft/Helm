@@ -9,8 +9,91 @@ export interface ConversationMessage {
   content: string
 }
 
+// Subtask suggestion type
+export interface SubtaskSuggestion {
+  title: string
+  description?: string
+}
+
+// Response type for copilot chat
+export interface CopilotResponse {
+  type: 'message' | 'subtasks'
+  content: string
+  suggestions?: SubtaskSuggestion[]
+  conversationId: string
+}
+
 // Limit history to avoid token overflow
 const MAX_HISTORY_MESSAGES = 20 // Keep last 20 messages (10 exchanges)
+
+// Subtask breakdown keywords
+const SUBTASK_KEYWORDS = [
+  'break down',
+  'break this down',
+  'subtasks',
+  'sub-tasks',
+  'steps to',
+  'breakdown',
+  'split into',
+  'divide into'
+]
+
+// Check if the message is requesting a subtask breakdown
+function isSubtaskRequest(message: string, hasLinkedTask: boolean): boolean {
+  const lowerMessage = message.toLowerCase()
+  // With linked task, look for breakdown keywords
+  // Without linked task, require explicit "subtask" mention
+  if (hasLinkedTask) {
+    return SUBTASK_KEYWORDS.some(kw => lowerMessage.includes(kw))
+  }
+  return lowerMessage.includes('subtask')
+}
+
+// System prompt addition for subtask requests
+const SUBTASK_PROMPT = `
+
+SPECIAL INSTRUCTION: The user is asking for a task breakdown. Respond with a JSON object in this exact format:
+{
+  "message": "A brief explanation of the breakdown approach",
+  "suggestions": [
+    { "title": "First actionable step", "description": "Optional context" },
+    { "title": "Second actionable step" }
+  ]
+}
+
+Rules:
+- Create 3-8 subtasks
+- Titles should start with action verbs (e.g., "Create", "Set up", "Review", "Write")
+- Order by logical sequence
+- Keep titles concise (under 60 characters)
+- Descriptions are optional but helpful for complex steps
+- Only return the JSON object, no markdown formatting or code blocks`
+
+// Parse AI response for subtask format
+function parseAIResponse(rawResponse: string, conversationId: string): CopilotResponse {
+  try {
+    // Try to extract JSON from the response (handle cases with extra text)
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      if (parsed.message && Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0) {
+        return {
+          type: 'subtasks',
+          content: parsed.message,
+          suggestions: parsed.suggestions.map((s: { title: string; description?: string }) => ({
+            title: s.title,
+            description: s.description
+          })),
+          conversationId
+        }
+      }
+    }
+  } catch {
+    // JSON parsing failed, treat as regular message
+  }
+  // Fallback to plain message
+  return { type: 'message', content: rawResponse, conversationId }
+}
 
 function trimHistory(history: ConversationMessage[]): ConversationMessage[] {
   if (history.length <= MAX_HISTORY_MESSAGES) {
@@ -349,7 +432,7 @@ export async function chat(
   taskId?: string,
   quickTodoId?: string,
   conversationHistory: ConversationMessage[] = []
-): Promise<{ response: string; conversationId: string }> {
+): Promise<CopilotResponse> {
   const apiKey = db.settings.get('openai_api_key')
   if (!apiKey) {
     throw new Error('OpenAI API key not configured. Please add it in Settings.')
@@ -357,6 +440,10 @@ export async function chat(
 
   const openai = new OpenAI({ apiKey })
   const context = buildContext(projectId, taskId, quickTodoId)
+
+  // Detect if this is a subtask request
+  const hasLinkedTask = !!(taskId || context.currentTask || context.currentQuickTodo)
+  const isSubtaskMode = isSubtaskRequest(message, hasLinkedTask)
 
   // Search for relevant documents using RAG (skip if we have a quick todo - use attached docs instead)
   if (!quickTodoId) {
@@ -377,7 +464,11 @@ export async function chat(
     }
   }
 
-  const systemPrompt = buildSystemPrompt(context)
+  // Build system prompt, append subtask instructions if needed
+  let systemPrompt = buildSystemPrompt(context)
+  if (isSubtaskMode) {
+    systemPrompt += SUBTASK_PROMPT
+  }
 
   // Build messages array with full conversation history
   const messages: ChatCompletionMessageParam[] = [
@@ -390,23 +481,30 @@ export async function chat(
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
-      max_tokens: 500,
-      temperature: 0.7
+      max_tokens: isSubtaskMode ? 800 : 500,
+      temperature: isSubtaskMode ? 0.3 : 0.7  // Lower temperature for more consistent JSON
     })
 
-    const response = completion.choices[0]?.message?.content || 'I couldn\'t generate a response. Please try again.'
+    const rawResponse = completion.choices[0]?.message?.content || 'I couldn\'t generate a response. Please try again.'
 
     // Save conversation to database
     const conversation = db.aiConversations.save({
       project_id: projectId || null,
       task_id: taskId || null,
       user_message: message,
-      ai_response: response,
+      ai_response: rawResponse,
       feedback: null
     })
 
+    // Parse the response (handles both subtask JSON and regular messages)
+    if (isSubtaskMode) {
+      return parseAIResponse(rawResponse, conversation.id)
+    }
+
+    // Regular message response
     return {
-      response,
+      type: 'message',
+      content: rawResponse,
       conversationId: conversation.id
     }
   } catch (error) {

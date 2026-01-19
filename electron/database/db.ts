@@ -568,8 +568,8 @@ export const db = {
       const order = task.order ?? orderResult.next_order
 
       const stmt = getDb().prepare(`
-        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -581,6 +581,7 @@ export const db = {
         task.status || 'todo',
         task.priority || null,
         order,
+        task.category || null,
         timestamp,
         timestamp
       )

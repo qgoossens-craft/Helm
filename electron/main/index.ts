@@ -316,6 +316,34 @@ function registerIpcHandlers(): void {
     return ai.suggestTaskBreakdown(taskTitle, projectContext)
   })
 
+  // Create multiple subtasks for a parent task
+  ipcMain.handle('tasks:create-subtasks', async (_, parentTaskId: string, subtasks: Array<{ title: string; description?: string }>) => {
+    const createdIds: string[] = []
+
+    // Get parent task to inherit project_id
+    const parentTask = db.tasks.getById(parentTaskId)
+    const projectId = parentTask?.project_id || null
+
+    for (let i = 0; i < subtasks.length; i++) {
+      const subtask = subtasks[i]
+      const created = db.tasks.create({
+        title: subtask.title,
+        description: subtask.description || null,
+        project_id: projectId,
+        parent_task_id: parentTaskId,
+        status: 'todo',
+        priority: null,
+        due_date: null,
+        category: null,
+        order: i,
+        deleted_at: null
+      })
+      createdIds.push(created.id)
+    }
+
+    return createdIds
+  })
+
   // Obsidian Integration
   ipcMain.handle('obsidian:selectVaultPath', async () => {
     const win = mainWindow || BrowserWindow.getFocusedWindow()

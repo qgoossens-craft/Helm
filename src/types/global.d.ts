@@ -90,6 +90,18 @@ export interface ChatResponse {
   conversationId: string
 }
 
+export interface SubtaskSuggestion {
+  title: string
+  description?: string
+}
+
+export interface CopilotResponse {
+  type: 'message' | 'subtasks'
+  content: string  // For 'message' type, this is the response text
+  suggestions?: SubtaskSuggestion[]  // For 'subtasks' type
+  conversationId: string
+}
+
 export interface ConversationMessage {
   role: 'user' | 'assistant'
   content: string
@@ -197,6 +209,7 @@ declare global {
         restore: (id: string) => Promise<Task>
         reorder: (taskId: string, newOrder: number) => Promise<void>
         getCategoriesByProject: (projectId: string) => Promise<string[]>
+        createSubtasks: (parentTaskId: string, subtasks: Array<{ title: string; description?: string }>) => Promise<string[]>
       }
       activity: {
         log: (entry: Omit<ActivityLogEntry, 'id' | 'created_at'>) => Promise<ActivityLogEntry>
@@ -227,7 +240,7 @@ declare global {
         search: (query: string, projectId?: string, taskId?: string) => Promise<DocumentSearchResult[]>
       }
       copilot: {
-        chat: (message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ConversationMessage[]) => Promise<ChatResponse>
+        chat: (message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ConversationMessage[]) => Promise<CopilotResponse>
         parseProjectBrainDump: (brainDump: string) => Promise<ParsedProject>
         suggestTaskBreakdown: (taskTitle: string, projectContext?: string) => Promise<string[]>
       }

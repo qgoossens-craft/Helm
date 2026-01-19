@@ -29,9 +29,10 @@ interface TaskDetailPanelProps {
   task: Task
   onClose: () => void
   projectId?: string | null
+  focusTitle?: boolean
 }
 
-export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelProps) {
+export function TaskDetailPanel({ task, onClose, projectId, focusTitle }: TaskDetailPanelProps) {
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description || '')
   const [status, setStatus] = useState(task.status)
@@ -85,6 +86,14 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
       titleRef.current.style.height = titleRef.current.scrollHeight + 'px'
     }
   }, [task])
+
+  // Focus and select title when focusTitle is true (e.g., when creating new task from category menu)
+  useEffect(() => {
+    if (focusTitle && titleRef.current) {
+      titleRef.current.focus()
+      titleRef.current.select()
+    }
+  }, [focusTitle])
 
   useEffect(() => {
     if (task?.project_id) {
@@ -636,7 +645,24 @@ export function TaskDetailPanel({ task, onClose, projectId }: TaskDetailPanelPro
             onBlur={handleSave}
             placeholder="Add a description... (use **bold**, *italic*, # headings)"
             className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text focus-within:border-helm-primary transition-colors"
-            autoFocus
+            autoFocus={!focusTitle}
+            onImagePaste={async (base64Data, mimeType) => {
+              setIsUploading(true)
+              try {
+                const result = await window.api.documents.uploadFromClipboard(base64Data, mimeType, task.id, projectId ?? null)
+                if (result.success) {
+                  const docs = await window.api.documents.getByTask(task.id)
+                  setDocuments(docs)
+                  pollDocumentStatus(result.documentId)
+                } else {
+                  console.error('Failed to upload pasted image:', result.error)
+                }
+              } catch (err) {
+                console.error('Failed to upload pasted image:', err)
+              } finally {
+                setIsUploading(false)
+              }
+            }}
           />
         </div>
 

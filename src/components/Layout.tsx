@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Home, Inbox, FolderKanban, Focus, Settings, Plus, ListTodo, BarChart3 } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
 import { useProjectsStore, useUIStore, useSettingsStore } from '../store'
@@ -10,6 +10,7 @@ import { PROJECT_COLORS, PROJECT_ICONS } from '../lib/projectConstants'
 
 export function Layout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { projects, fetchProjects } = useProjectsStore()
   const { openCopilot, openKickoffWizard, openQuickSwitcher } = useUIStore()
   const { settings, fetchSettings } = useSettingsStore()
@@ -38,7 +39,13 @@ export function Layout() {
     if (!window.api) return
 
     const unsubCopilot = window.api.onShortcut('shortcut:copilot', () => {
-      openCopilot()
+      // Check if we're on a project page and pass context
+      const projectMatch = location.pathname.match(/^\/project\/([^/]+)/)
+      if (projectMatch) {
+        openCopilot({ projectId: projectMatch[1] })
+      } else {
+        openCopilot()
+      }
     })
 
     const unsubCapture = window.api.onShortcut('shortcut:quick-capture', () => {
@@ -59,7 +66,7 @@ export function Layout() {
       unsubFocus()
       unsubGlobalCapture()
     }
-  }, [navigate, openCopilot])
+  }, [navigate, openCopilot, location.pathname])
 
   // Filter active projects
   const activeProjects = projects.filter((p) => p.status !== 'abandoned' && !p.archived_at)

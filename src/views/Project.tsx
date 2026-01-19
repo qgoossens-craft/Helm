@@ -1,9 +1,9 @@
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe, Tag } from 'lucide-react'
+import { List, LayoutGrid, Plus, Check, Trash2, FileText, Image, File, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Filter, RotateCcw, Sparkles, Calendar, BookOpen, Link2, ExternalLink, Video, Globe, Tag, ArrowRightLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useProjectsStore, useTasksStore, useUIStore, useCalendarStore } from '../store'
+import { useProjectsStore, useTasksStore, useUIStore, useCalendarStore, useCopilotStore } from '../store'
 import { TaskDetailPanel } from '../components/TaskDetailPanel'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
@@ -22,6 +22,7 @@ export function Project() {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [shouldFocusTitle, setShouldFocusTitle] = useState(false)
   const [documents, setDocuments] = useState<Document[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [showDocuments, setShowDocuments] = useState(true)
@@ -47,7 +48,8 @@ export function Project() {
   const { projects, fetchProjects, deleteProject } = useProjectsStore()
   const navigate = useNavigate()
   const { tasks, deletedTasks, fetchTasksByProject, fetchDeletedTasks, createTask, updateTask, deleteTask, restoreTask, projectCategories, fetchCategoriesByProject, createCategory } = useTasksStore()
-  const { openCopilot, openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
+  const { openCopilot, openObsidianBrowser, isObsidianBrowserOpen, openMoveToProject } = useUIStore()
+  const { setLinkedTask } = useCopilotStore()
 
   useEffect(() => {
     fetchProjects()
@@ -226,6 +228,25 @@ export function Project() {
     }
   }
 
+  const handleCreateTaskInCategory = async (category: string | null) => {
+    if (!id) return
+    try {
+      const newTask = await createTask({
+        project_id: id,
+        parent_task_id: null,
+        title: 'New task',
+        description: null,
+        status: 'todo',
+        order: projectTasks.length,
+        category: category
+      })
+      setSelectedTask(newTask)
+      setShouldFocusTitle(true)
+    } catch (err) {
+      console.error('Failed to create task:', err)
+    }
+  }
+
   const handleUploadDocument = async () => {
     if (!id) return
     setIsUploading(true)
@@ -400,6 +421,11 @@ export function Project() {
     }
   }
 
+  const handleAskJeeves = (task: Task) => {
+    setLinkedTask(task)
+    openCopilot({ projectId: id })
+  }
+
   const getFileIcon = (fileType: string, fileName?: string) => {
     if (fileType.startsWith('image/')) return <Image size={14} />
     if (fileType.includes('pdf') || fileType.includes('document')) return <FileText size={14} />
@@ -539,6 +565,9 @@ export function Project() {
             isDeleted={taskFilter === 'deleted'}
             projectId={id!}
             onCreateCategory={createCategory}
+            onAskJeeves={handleAskJeeves}
+            onMoveToProject={openMoveToProject}
+            onCreateTaskInCategory={handleCreateTaskInCategory}
           />
         ) : (
           <KanbanView
@@ -555,7 +584,11 @@ export function Project() {
         <TaskDetailPanel
           task={selectedTask}
           projectId={id}
-          onClose={() => setSelectedTask(null)}
+          focusTitle={shouldFocusTitle}
+          onClose={() => {
+            setSelectedTask(null)
+            setShouldFocusTitle(false)
+          }}
         />
       )}
 
@@ -856,9 +889,9 @@ export function Project() {
         <div className="p-2 border-t border-helm-border">
           <button
             onClick={() => openCopilot({ projectId: id })}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-primary/10 text-sm text-helm-text-muted hover:text-helm-primary transition-colors"
           >
-            <Sparkles size={16} />
+            <Sparkles size={16} className="text-helm-primary" />
             <span>Ask Jeeves</span>
           </button>
         </div>
@@ -1009,9 +1042,12 @@ interface CategoryGroupProps {
   onTaskDragStart?: (e: React.DragEvent, taskId: string) => void
   onTaskDragEnd?: () => void
   draggingTaskId?: string | null
+  // Context menu props
+  onTaskContextMenu?: (e: React.MouseEvent, task: Task) => void
+  onCategoryContextMenu?: (e: React.MouseEvent, category: string | null) => void
 }
 
-function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, onDragOver, onDragEnter, onDragLeave, onDrop, isDragOver, onTaskDragStart, onTaskDragEnd, draggingTaskId }: CategoryGroupProps) {
+function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, onDragOver, onDragEnter, onDragLeave, onDrop, isDragOver, onTaskDragStart, onTaskDragEnd, draggingTaskId, onTaskContextMenu, onCategoryContextMenu }: CategoryGroupProps) {
   return (
     <div
       className={`space-y-1 rounded-lg transition-all ${
@@ -1024,6 +1060,11 @@ function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggl
     >
       <div
         onClick={onToggleCollapse}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onCategoryContextMenu?.(e, category)
+        }}
         className="flex items-center gap-2 text-sm font-medium text-helm-text-muted hover:text-helm-text transition-colors w-full py-1 cursor-pointer select-none"
         role="button"
         tabIndex={0}
@@ -1059,6 +1100,7 @@ function CategoryGroup({ category, tasks, isCollapsed, onToggleCollapse, onToggl
               onDragStart={onTaskDragStart}
               onDragEnd={onTaskDragEnd}
               isDragging={draggingTaskId === task.id}
+              onContextMenu={onTaskContextMenu}
             />
           ))}
         </div>
@@ -1080,14 +1122,17 @@ interface ListViewProps {
   isDeleted: boolean
   projectId: string
   onCreateCategory: (projectId: string, categoryName: string) => void
+  onAskJeeves: (task: Task) => void
+  onMoveToProject: (taskId: string) => void
+  onCreateTaskInCategory: (category: string | null) => void
 }
 
-function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, projectId, onCreateCategory }: ListViewProps) {
+function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, projectId, onCreateCategory, onAskJeeves, onMoveToProject, onCreateTaskInCategory }: ListViewProps) {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
 
-  // Context menu state
+  // Context menu state (for category creation)
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean
     position: { x: number; y: number }
@@ -1096,6 +1141,22 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
   } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Task context menu state (separate from category context menu)
+  const [taskContextMenu, setTaskContextMenu] = useState<{
+    visible: boolean
+    position: { x: number; y: number }
+    task: Task
+  } | null>(null)
+  const taskContextMenuRef = useRef<HTMLDivElement>(null)
+
+  // Category context menu state
+  const [categoryContextMenu, setCategoryContextMenu] = useState<{
+    visible: boolean
+    position: { x: number; y: number }
+    category: string | null
+  } | null>(null)
+  const categoryContextMenuRef = useRef<HTMLDivElement>(null)
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('taskId', taskId)
@@ -1245,6 +1306,83 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
     }
   }, [contextMenu?.visible])
 
+  // Task context menu handler
+  const handleTaskContextMenu = (e: React.MouseEvent, task: Task) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const menuWidth = 180
+    const menuHeight = 140
+    let x = e.clientX
+    let y = e.clientY
+
+    if (x + menuWidth > window.innerWidth) {
+      x = window.innerWidth - menuWidth - 8
+    }
+    if (y + menuHeight > window.innerHeight) {
+      y = window.innerHeight - menuHeight - 8
+    }
+
+    setTaskContextMenu({
+      visible: true,
+      position: { x, y },
+      task
+    })
+  }
+
+  // Category context menu handler
+  const handleCategoryContextMenu = (e: React.MouseEvent, category: string | null) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const menuWidth = 180
+    const menuHeight = 50
+    let x = e.clientX
+    let y = e.clientY
+
+    if (x + menuWidth > window.innerWidth) {
+      x = window.innerWidth - menuWidth - 8
+    }
+    if (y + menuHeight > window.innerHeight) {
+      y = window.innerHeight - menuHeight - 8
+    }
+
+    setCategoryContextMenu({
+      visible: true,
+      position: { x, y },
+      category
+    })
+  }
+
+  // Click-outside detection for task context menu and category context menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (taskContextMenuRef.current && !taskContextMenuRef.current.contains(event.target as Node)) {
+        setTaskContextMenu(null)
+      }
+      if (categoryContextMenuRef.current && !categoryContextMenuRef.current.contains(event.target as Node)) {
+        setCategoryContextMenu(null)
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setTaskContextMenu(null)
+        setCategoryContextMenu(null)
+      }
+    }
+
+    if (taskContextMenu?.visible || categoryContextMenu?.visible) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [taskContextMenu?.visible, categoryContextMenu?.visible])
+
   if (tasks.length === 0) {
     return (
       <div className="flex-1 space-y-2" onContextMenu={handleContextMenu}>
@@ -1315,6 +1453,8 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
           onTaskDragStart={handleDragStart}
           onTaskDragEnd={handleDragEnd}
           draggingTaskId={draggingTaskId}
+          onTaskContextMenu={handleTaskContextMenu}
+          onCategoryContextMenu={handleCategoryContextMenu}
         />
       ))}
 
@@ -1342,6 +1482,8 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
           onTaskDragStart={handleDragStart}
           onTaskDragEnd={handleDragEnd}
           draggingTaskId={draggingTaskId}
+          onTaskContextMenu={handleTaskContextMenu}
+          onCategoryContextMenu={handleCategoryContextMenu}
         />
       )}
 
@@ -1377,6 +1519,67 @@ function ListView({ tasks, onToggle, onDelete, onRestore, onSelect, onPriorityCh
           )}
         </div>
       )}
+
+      {/* Task context menu */}
+      {taskContextMenu?.visible && (
+        <div
+          ref={taskContextMenuRef}
+          className="fixed bg-helm-surface-elevated border border-helm-border rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+          style={{ left: taskContextMenu.position.x, top: taskContextMenu.position.y }}
+        >
+          <button
+            onClick={() => {
+              onAskJeeves(taskContextMenu.task)
+              setTaskContextMenu(null)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-helm-text hover:bg-helm-primary/10 transition-colors flex items-center gap-2"
+          >
+            <Sparkles size={14} className="text-helm-primary" />
+            Ask Jeeves
+          </button>
+          <button
+            onClick={() => {
+              onMoveToProject(taskContextMenu.task.id)
+              setTaskContextMenu(null)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-helm-text hover:bg-helm-bg transition-colors flex items-center gap-2"
+          >
+            <ArrowRightLeft size={14} className="text-helm-text-muted" />
+            Move to project...
+          </button>
+          <div className="my-1 border-t border-helm-border" />
+          <button
+            onClick={() => {
+              onDelete(taskContextMenu.task.id)
+              setTaskContextMenu(null)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-helm-error hover:bg-helm-error/10 transition-colors flex items-center gap-2"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Category context menu */}
+      {categoryContextMenu?.visible && (
+        <div
+          ref={categoryContextMenuRef}
+          className="fixed bg-helm-surface-elevated border border-helm-border rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+          style={{ left: categoryContextMenu.position.x, top: categoryContextMenu.position.y }}
+        >
+          <button
+            onClick={() => {
+              onCreateTaskInCategory(categoryContextMenu.category)
+              setCategoryContextMenu(null)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-helm-text hover:bg-helm-primary/10 transition-colors flex items-center gap-2"
+          >
+            <Plus size={14} className="text-helm-primary" />
+            Add task
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1397,9 +1600,11 @@ interface TaskRowProps {
   onDragStart?: (e: React.DragEvent, taskId: string) => void
   onDragEnd?: () => void
   isDragging?: boolean
+  // Context menu prop
+  onContextMenu?: (e: React.MouseEvent, task: Task) => void
 }
 
-function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, draggable, onDragStart, onDragEnd, isDragging }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChange, onSetDueDate, onCategoryChange, projectCategories, isDeleted, draggable, onDragStart, onDragEnd, isDragging, onContextMenu }: TaskRowProps) {
   const [isCompleting, setIsCompleting] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -1452,6 +1657,7 @@ function TaskRow({ task, onToggle, onDelete, onRestore, onSelect, onPriorityChan
       onDragStart={(e) => onDragStart?.(e, task.id)}
       onDragEnd={onDragEnd}
       onClick={() => !isDeleted && !isCompleting && onSelect(task)}
+      onContextMenu={(e) => onContextMenu?.(e, task)}
       className={`grid grid-cols-[auto_auto_1fr_auto_5rem] items-center gap-2 px-3 py-2.5 bg-helm-surface border rounded-lg group animate-slide-up transition-colors relative z-0 hover:z-10 ${
         isDeleted ? 'border-helm-border/50 opacity-60' : isOverdue ? 'border-helm-error/50 cursor-pointer hover:border-helm-primary' : 'border-helm-border cursor-pointer hover:border-helm-primary'
       } ${isCompleting ? 'animate-complete-out' : ''} ${isDragging ? 'opacity-50' : ''} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}

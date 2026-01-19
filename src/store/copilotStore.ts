@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ConversationMessage } from '../types/global'
+import type { ConversationMessage, Task, SubtaskSuggestion } from '../types/global'
 
 interface CopilotContext {
   projectId?: string
@@ -7,24 +7,37 @@ interface CopilotContext {
   quickTodoId?: string
 }
 
+/** Extended message that includes subtask suggestions */
+export interface CopilotMessage extends ConversationMessage {
+  /** Optional subtask suggestions (only for assistant messages with type 'subtasks') */
+  suggestions?: SubtaskSuggestion[]
+  /** The task ID that was linked when this message was generated */
+  linkedTaskId?: string
+  /** The task title (for display in user messages) */
+  linkedTaskTitle?: string
+}
+
 interface CopilotState {
-  messages: ConversationMessage[]
+  messages: CopilotMessage[]
   currentContext: CopilotContext | null
-  addMessage: (message: ConversationMessage) => void
+  linkedTask: Task | null
+  addMessage: (message: CopilotMessage) => void
   clearMessages: () => void
   setContext: (context: CopilotContext | null) => void
+  setLinkedTask: (task: Task | null) => void
 }
 
 export const useCopilotStore = create<CopilotState>((set, get) => ({
   messages: [],
   currentContext: null,
+  linkedTask: null,
 
   addMessage: (message) =>
     set((state) => ({
       messages: [...state.messages, message]
     })),
 
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], linkedTask: null }),
 
   setContext: (context) => {
     const { currentContext, clearMessages } = get()
@@ -37,5 +50,7 @@ export const useCopilotStore = create<CopilotState>((set, get) => ({
       clearMessages()
     }
     set({ currentContext: context })
-  }
+  },
+
+  setLinkedTask: (task) => set({ linkedTask: task })
 }))

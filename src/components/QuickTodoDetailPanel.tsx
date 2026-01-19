@@ -519,6 +519,23 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
             placeholder="Add a description... (use **bold**, *italic*, # headings)"
             className="w-full px-3 py-2 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text focus-within:border-helm-primary transition-colors"
             autoFocus
+            onImagePaste={async (base64Data, mimeType) => {
+              setIsUploading(true)
+              try {
+                const result = await window.api.documents.uploadFromClipboard(base64Data, mimeType, null, null, todo.id)
+                if (result.success) {
+                  const docs = await window.api.documents.getByQuickTodo(todo.id)
+                  setDocuments(docs)
+                  pollDocumentStatus(result.documentId)
+                } else {
+                  console.error('Failed to upload pasted image:', result.error)
+                }
+              } catch (err) {
+                console.error('Failed to upload pasted image:', err)
+              } finally {
+                setIsUploading(false)
+              }
+            }}
           />
         </div>
 

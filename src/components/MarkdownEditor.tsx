@@ -13,9 +13,10 @@ interface MarkdownEditorProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  onImagePaste?: (base64Data: string, mimeType: string) => void
 }
 
-export function MarkdownEditor({ content, onChange, onBlur, placeholder, className, autoFocus }: MarkdownEditorProps) {
+export function MarkdownEditor({ content, onChange, onBlur, placeholder, className, autoFocus, onImagePaste }: MarkdownEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -51,6 +52,31 @@ export function MarkdownEditor({ content, onChange, onBlur, placeholder, classNa
     editorProps: {
       attributes: {
         class: 'outline-none min-h-[150px]'
+      },
+      handlePaste: (_view, event) => {
+        if (!onImagePaste) return false
+
+        const items = event.clipboardData?.items
+        if (!items) return false
+
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile()
+            if (!file) continue
+
+            const reader = new FileReader()
+            reader.onload = (e) => {
+              const base64 = e.target?.result as string
+              // Remove the data URL prefix to get just base64
+              const base64Data = base64.split(',')[1]
+              onImagePaste(base64Data, file.type)
+            }
+            reader.readAsDataURL(file)
+            return true // Prevent default paste
+          }
+        }
+
+        return false // Allow normal paste
       }
     }
   })
