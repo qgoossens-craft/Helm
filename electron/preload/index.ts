@@ -13,6 +13,8 @@ export interface Project {
   archived_at: string | null
 }
 
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
 export interface Task {
   id: string
   project_id: string | null
@@ -27,6 +29,11 @@ export interface Task {
   created_at: string
   updated_at: string
   completed_at: string | null
+  // Recurrence fields
+  recurrence_pattern: RecurrencePattern | null
+  recurrence_config: string | null
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 export interface ActivityLogEntry {
@@ -128,6 +135,11 @@ export interface QuickTodo {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Recurrence fields
+  recurrence_pattern: RecurrencePattern | null
+  recurrence_config: string | null
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 export interface Source {
@@ -218,7 +230,18 @@ contextBridge.exposeInMainWorld('api', {
     getCategoriesByProject: (projectId: string): Promise<string[]> =>
       ipcRenderer.invoke('db:tasks:getCategoriesByProject', projectId),
     createSubtasks: (parentTaskId: string, subtasks: Array<{ title: string; description?: string }>): Promise<string[]> =>
-      ipcRenderer.invoke('tasks:create-subtasks', parentTaskId, subtasks)
+      ipcRenderer.invoke('tasks:create-subtasks', parentTaskId, subtasks),
+    // Recurrence methods
+    getRecurring: (projectId?: string): Promise<Task[]> =>
+      ipcRenderer.invoke('db:tasks:getRecurring', projectId),
+    getInstances: (parentId: string): Promise<Task[]> =>
+      ipcRenderer.invoke('db:tasks:getInstances', parentId),
+    createInstance: (parentTask: Task, dueDate: string): Promise<Task> =>
+      ipcRenderer.invoke('db:tasks:createInstance', parentTask, dueDate),
+    hasInstanceOnDate: (parentId: string, dueDate: string): Promise<boolean> =>
+      ipcRenderer.invoke('db:tasks:hasInstanceOnDate', parentId, dueDate),
+    getDueOnDate: (date: string): Promise<Task[]> =>
+      ipcRenderer.invoke('db:tasks:getDueOnDate', date)
   },
 
   // Activity Log
@@ -286,10 +309,21 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:getOverdue'),
     create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:create', todo),
-    update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): Promise<QuickTodo> =>
+    update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:update', id, updates),
     delete: (id: string): Promise<void> =>
-      ipcRenderer.invoke('db:quickTodos:delete', id)
+      ipcRenderer.invoke('db:quickTodos:delete', id),
+    // Recurrence methods
+    getRecurring: (list?: 'personal' | 'work' | 'tweaks'): Promise<QuickTodo[]> =>
+      ipcRenderer.invoke('db:quickTodos:getRecurring', list),
+    getInstances: (parentId: string): Promise<QuickTodo[]> =>
+      ipcRenderer.invoke('db:quickTodos:getInstances', parentId),
+    createInstance: (parentTodo: QuickTodo, dueDate: string): Promise<QuickTodo> =>
+      ipcRenderer.invoke('db:quickTodos:createInstance', parentTodo, dueDate),
+    hasInstanceOnDate: (parentId: string, dueDate: string): Promise<boolean> =>
+      ipcRenderer.invoke('db:quickTodos:hasInstanceOnDate', parentId, dueDate),
+    getDueOnDate: (date: string): Promise<QuickTodo[]> =>
+      ipcRenderer.invoke('db:quickTodos:getDueOnDate', date)
   },
 
   // Sources (URL links)
@@ -316,6 +350,39 @@ contextBridge.exposeInMainWorld('api', {
   stats: {
     getCompletionStats: (): Promise<CompletionStats> =>
       ipcRenderer.invoke('db:stats:getCompletionStats')
+  },
+
+  // Notifications / Recurring Items
+  notifications: {
+    getUpcoming: (days?: number): Promise<Array<{
+      type: 'task' | 'todo'
+      parentId: string
+      title: string
+      dates: string[]
+      list?: string
+    }>> => ipcRenderer.invoke('notifications:getUpcoming', days),
+    getDueToday: (): Promise<Array<{
+      type: 'task' | 'todo'
+      item: { id: string; title: string; due_date: string | null }
+    }>> => ipcRenderer.invoke('notifications:getDueToday'),
+    materialize: (type: 'task' | 'todo', parentId: string): Promise<{
+      success: boolean
+      instanceId?: string
+      error?: string
+    }> => ipcRenderer.invoke('notifications:materialize', type, parentId),
+    notifyNow: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('notifications:notifyNow'),
+    onRecurringNotification: (callback: (notification: {
+      id: string
+      type: 'task' | 'todo'
+      title: string
+      message: string
+      dueDate: string
+      parentId: string
+    }) => void) => {
+      ipcRenderer.on('notification:recurring', (_, notification) => callback(notification))
+      return () => ipcRenderer.removeListener('notification:recurring', callback)
+    }
   },
 
   // AI Operations
@@ -370,6 +437,12 @@ declare global {
         reorder: (taskId: string, newOrder: number) => Promise<void>
         getCategoriesByProject: (projectId: string) => Promise<string[]>
         createSubtasks: (parentTaskId: string, subtasks: Array<{ title: string; description?: string }>) => Promise<string[]>
+        // Recurrence methods
+        getRecurring: (projectId?: string) => Promise<Task[]>
+        getInstances: (parentId: string) => Promise<Task[]>
+        createInstance: (parentTask: Task, dueDate: string) => Promise<Task>
+        hasInstanceOnDate: (parentId: string, dueDate: string) => Promise<boolean>
+        getDueOnDate: (date: string) => Promise<Task[]>
       }
       activity: {
         log: (entry: Omit<ActivityLogEntry, 'id' | 'created_at'>) => Promise<ActivityLogEntry>
@@ -409,8 +482,14 @@ declare global {
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+        // Recurrence methods
+        getRecurring: (list?: 'personal' | 'work' | 'tweaks') => Promise<QuickTodo[]>
+        getInstances: (parentId: string) => Promise<QuickTodo[]>
+        createInstance: (parentTodo: QuickTodo, dueDate: string) => Promise<QuickTodo>
+        hasInstanceOnDate: (parentId: string, dueDate: string) => Promise<boolean>
+        getDueOnDate: (date: string) => Promise<QuickTodo[]>
       }
       sources: {
         getByTask: (taskId: string) => Promise<Source[]>
@@ -424,6 +503,33 @@ declare global {
       }
       stats: {
         getCompletionStats: () => Promise<CompletionStats>
+      }
+      notifications: {
+        getUpcoming: (days?: number) => Promise<Array<{
+          type: 'task' | 'todo'
+          parentId: string
+          title: string
+          dates: string[]
+          list?: string
+        }>>
+        getDueToday: () => Promise<Array<{
+          type: 'task' | 'todo'
+          item: { id: string; title: string; due_date: string | null }
+        }>>
+        materialize: (type: 'task' | 'todo', parentId: string) => Promise<{
+          success: boolean
+          instanceId?: string
+          error?: string
+        }>
+        notifyNow: () => Promise<{ success: boolean }>
+        onRecurringNotification: (callback: (notification: {
+          id: string
+          type: 'task' | 'todo'
+          title: string
+          message: string
+          dueDate: string
+          parentId: string
+        }) => void) => () => void
       }
       obsidian: {
         selectVaultPath: () => Promise<string | null>

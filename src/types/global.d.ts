@@ -14,6 +14,18 @@ export interface Project {
   archived_at: string | null
 }
 
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+export interface RecurrenceConfig {
+  // For weekly: which days (0=Sunday, 1=Monday, etc.)
+  weekDays?: number[]
+  // For monthly: day of month (1-31)
+  monthDay?: number
+  // For yearly: month and day
+  yearMonth?: number
+  yearDay?: number
+}
+
 export interface Task {
   id: string
   project_id: string | null
@@ -29,6 +41,11 @@ export interface Task {
   updated_at: string
   completed_at: string | null
   deleted_at: string | null
+  // Recurrence fields
+  recurrence_pattern: RecurrencePattern | null
+  recurrence_config: string | null  // JSON stringified RecurrenceConfig
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 export interface ActivityLogEntry {
@@ -130,6 +147,11 @@ export interface QuickTodo {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Recurrence fields
+  recurrence_pattern: RecurrencePattern | null
+  recurrence_config: string | null  // JSON stringified RecurrenceConfig
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 export interface Source {
@@ -210,6 +232,12 @@ declare global {
         reorder: (taskId: string, newOrder: number) => Promise<void>
         getCategoriesByProject: (projectId: string) => Promise<string[]>
         createSubtasks: (parentTaskId: string, subtasks: Array<{ title: string; description?: string }>) => Promise<string[]>
+        // Recurrence methods
+        getRecurring: (projectId?: string) => Promise<Task[]>
+        getInstances: (parentId: string) => Promise<Task[]>
+        createInstance: (parentTask: Task, dueDate: string) => Promise<Task>
+        hasInstanceOnDate: (parentId: string, dueDate: string) => Promise<boolean>
+        getDueOnDate: (date: string) => Promise<Task[]>
       }
       activity: {
         log: (entry: Omit<ActivityLogEntry, 'id' | 'created_at'>) => Promise<ActivityLogEntry>
@@ -250,8 +278,14 @@ declare global {
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+        // Recurrence methods
+        getRecurring: (list?: 'personal' | 'work' | 'tweaks') => Promise<QuickTodo[]>
+        getInstances: (parentId: string) => Promise<QuickTodo[]>
+        createInstance: (parentTodo: QuickTodo, dueDate: string) => Promise<QuickTodo>
+        hasInstanceOnDate: (parentId: string, dueDate: string) => Promise<boolean>
+        getDueOnDate: (date: string) => Promise<QuickTodo[]>
       }
       sources: {
         getByTask: (taskId: string) => Promise<Source[]>
@@ -265,6 +299,33 @@ declare global {
       }
       stats: {
         getCompletionStats: () => Promise<CompletionStats>
+      }
+      notifications: {
+        getUpcoming: (days?: number) => Promise<Array<{
+          type: 'task' | 'todo'
+          parentId: string
+          title: string
+          dates: string[]
+          list?: string
+        }>>
+        getDueToday: () => Promise<Array<{
+          type: 'task' | 'todo'
+          item: { id: string; title: string; due_date: string | null }
+        }>>
+        materialize: (type: 'task' | 'todo', parentId: string) => Promise<{
+          success: boolean
+          instanceId?: string
+          error?: string
+        }>
+        notifyNow: () => Promise<{ success: boolean }>
+        onRecurringNotification: (callback: (notification: {
+          id: string
+          type: 'task' | 'todo'
+          title: string
+          message: string
+          dueDate: string
+          parentId: string
+        }) => void) => () => void
       }
       obsidian: {
         selectVaultPath: () => Promise<string | null>

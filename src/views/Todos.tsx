@@ -3,8 +3,9 @@ import { Plus, Trash2, Calendar, Check } from 'lucide-react'
 import { useQuickTodosStore, useCalendarStore } from '../store'
 import { PriorityIndicator } from '../components/PriorityIndicator'
 import { PrioritySelector } from '../components/PrioritySelector'
+import { RecurrenceSelector, RecurrenceIndicator } from '../components/RecurrenceSelector'
 import { QuickTodoDetailPanel } from '../components/QuickTodoDetailPanel'
-import type { QuickTodo } from '../types/global'
+import type { QuickTodo, RecurrencePattern } from '../types/global'
 import type { Priority } from '../lib/priorityConstants'
 
 type TodoList = 'personal' | 'work' | 'tweaks'
@@ -84,6 +85,25 @@ export function Todos() {
       await updateTodo(id, { priority })
     } catch (err) {
       console.error('Failed to set priority:', err)
+    }
+  }
+
+  const handleSetRecurrence = async (
+    id: string,
+    pattern: RecurrencePattern | null,
+    config: string | null,
+    endDate: string | null
+  ) => {
+    try {
+      await updateTodo(id, {
+        recurrence_pattern: pattern,
+        recurrence_config: config,
+        recurrence_end_date: endDate
+      })
+      // Refresh calendar to show recurring items
+      useCalendarStore.getState().fetchItems()
+    } catch (err) {
+      console.error('Failed to set recurrence:', err)
     }
   }
 
@@ -167,6 +187,7 @@ export function Todos() {
                     onDelete={() => handleDelete(todo.id)}
                     onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
                     onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
+                    onSetRecurrence={(pattern, config, endDate) => handleSetRecurrence(todo.id, pattern, config, endDate)}
                   />
                 ))}
 
@@ -187,6 +208,7 @@ export function Todos() {
                         onDelete={() => handleDelete(todo.id)}
                         onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
                         onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
+                        onSetRecurrence={(pattern, config, endDate) => handleSetRecurrence(todo.id, pattern, config, endDate)}
                       />
                     ))}
                   </>
@@ -225,11 +247,14 @@ interface TodoItemProps {
   onDelete: () => void
   onSetDueDate: (date: string | null) => void
   onSetPriority: (priority: Priority | null) => void
+  onSetRecurrence: (pattern: RecurrencePattern | null, config: string | null, endDate: string | null) => void
 }
 
-function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate, onSetPriority }: TodoItemProps) {
+function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate, onSetPriority, onSetRecurrence }: TodoItemProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
+  const isRecurring = !!todo.recurrence_pattern
+  const isInstance = !!todo.recurring_parent_id
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -308,11 +333,17 @@ function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate
       {/* Priority indicator */}
       <PriorityIndicator priority={todo.priority} />
 
-      {/* Title */}
-      <div className="flex-1 min-w-0">
+      {/* Title and recurrence indicator */}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         <p className={`text-helm-text truncate ${todo.completed || isCompleting ? 'line-through text-helm-text-muted' : ''}`}>
           {todo.title}
         </p>
+        {(isRecurring || isInstance) && (
+          <RecurrenceIndicator
+            pattern={todo.recurrence_pattern}
+            isInstance={isInstance}
+          />
+        )}
       </div>
 
       {/* Priority selector (on hover) */}
@@ -322,21 +353,41 @@ function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate
         </div>
       )}
 
+      {/* Recurrence selector (on hover) - only for non-instance items */}
+      {!todo.completed && !isCompleting && !isInstance && (
+        <div onClick={(e) => e.stopPropagation()} className={`transition-opacity ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+          <RecurrenceSelector
+            pattern={todo.recurrence_pattern}
+            config={todo.recurrence_config}
+            endDate={todo.recurrence_end_date}
+            onRecurrenceChange={onSetRecurrence}
+          />
+        </div>
+      )}
+
       {/* Due date */}
       <div className="relative" onClick={(e) => e.stopPropagation()}>
+        {/* Show formatted date when set (non-hover) */}
+        {todo.due_date && !isCompleting && (
+          <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs group-hover:hidden whitespace-nowrap ${
+            isOverdue ? 'text-helm-error bg-helm-error/10' : 'text-helm-text-muted bg-helm-bg'
+          }`}>
+            <Calendar size={12} />
+            {formatDueDate(todo.due_date)}
+          </div>
+        )}
+        {/* Icon-only button (on hover or when no date) */}
         <button
           onClick={() => setShowDatePicker(!showDatePicker)}
           disabled={isCompleting}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+          className={`p-1 rounded transition-colors hover:bg-helm-surface-elevated ${
             todo.due_date
-              ? isOverdue && !isCompleting
-                ? 'text-helm-error bg-helm-error/10'
-                : 'text-helm-text-muted bg-helm-bg'
-              : 'text-helm-text-muted opacity-0 group-hover:opacity-100 hover:bg-helm-bg'
+              ? `hidden group-hover:block ${isOverdue ? 'text-helm-error' : 'text-helm-primary'}`
+              : 'text-helm-primary opacity-0 group-hover:opacity-100'
           } ${isCompleting ? 'opacity-0' : ''}`}
+          title={todo.due_date ? `Due: ${formatDueDate(todo.due_date)}` : 'Set due date'}
         >
-          <Calendar size={12} />
-          {todo.due_date ? formatDueDate(todo.due_date) : 'Set date'}
+          <Calendar size={14} />
         </button>
 
         {showDatePicker && (
@@ -368,10 +419,10 @@ function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate
       {/* Delete button */}
       <button
         onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className={`p-2 text-helm-text-muted hover:text-helm-error transition-all ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
+        className={`p-1 text-helm-primary hover:text-helm-error transition-colors ${isCompleting ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
         title="Delete"
       >
-        <Trash2 size={16} />
+        <Trash2 size={14} />
       </button>
     </div>
   )

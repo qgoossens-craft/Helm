@@ -203,6 +203,56 @@ function runMigrations(db: Database.Database): void {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_task ON sources(task_id)`)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_project ON sources(project_id)`)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sources_quick_todo ON sources(quick_todo_id)`)
+
+  // Migration: Add recurrence columns to tasks table
+  const tasksInfoRecurrence = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>
+  const taskColumnsRecurrence = tasksInfoRecurrence.map(col => col.name)
+
+  if (!taskColumnsRecurrence.includes('recurrence_pattern')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_pattern TEXT DEFAULT NULL CHECK (recurrence_pattern IN ('daily', 'weekly', 'monthly', 'yearly'))`)
+    console.log('Migration: Added recurrence_pattern column to tasks')
+  }
+
+  if (!taskColumnsRecurrence.includes('recurrence_config')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_config TEXT DEFAULT NULL`)
+    console.log('Migration: Added recurrence_config column to tasks')
+  }
+
+  if (!taskColumnsRecurrence.includes('recurring_parent_id')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN recurring_parent_id TEXT DEFAULT NULL REFERENCES tasks(id) ON DELETE CASCADE`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_recurring_parent ON tasks(recurring_parent_id)`)
+    console.log('Migration: Added recurring_parent_id column to tasks')
+  }
+
+  if (!taskColumnsRecurrence.includes('recurrence_end_date')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_end_date TEXT DEFAULT NULL`)
+    console.log('Migration: Added recurrence_end_date column to tasks')
+  }
+
+  // Migration: Add recurrence columns to quick_todos table
+  const quickTodosInfoRecurrence = db.prepare("PRAGMA table_info(quick_todos)").all() as Array<{ name: string }>
+  const quickTodosColumnsRecurrence = quickTodosInfoRecurrence.map(col => col.name)
+
+  if (!quickTodosColumnsRecurrence.includes('recurrence_pattern')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN recurrence_pattern TEXT DEFAULT NULL CHECK (recurrence_pattern IN ('daily', 'weekly', 'monthly', 'yearly'))`)
+    console.log('Migration: Added recurrence_pattern column to quick_todos')
+  }
+
+  if (!quickTodosColumnsRecurrence.includes('recurrence_config')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN recurrence_config TEXT DEFAULT NULL`)
+    console.log('Migration: Added recurrence_config column to quick_todos')
+  }
+
+  if (!quickTodosColumnsRecurrence.includes('recurring_parent_id')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN recurring_parent_id TEXT DEFAULT NULL REFERENCES quick_todos(id) ON DELETE CASCADE`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_recurring_parent ON quick_todos(recurring_parent_id)`)
+    console.log('Migration: Added recurring_parent_id column to quick_todos')
+  }
+
+  if (!quickTodosColumnsRecurrence.includes('recurrence_end_date')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN recurrence_end_date TEXT DEFAULT NULL`)
+    console.log('Migration: Added recurrence_end_date column to quick_todos')
+  }
 }
 
 // Initialize database
@@ -298,6 +348,11 @@ interface Task {
   updated_at: string
   completed_at: string | null
   deleted_at: string | null
+  // Recurrence fields
+  recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  recurrence_config: string | null
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 interface ActivityLogEntry {
@@ -364,6 +419,11 @@ interface QuickTodo {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Recurrence fields
+  recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  recurrence_config: string | null
+  recurring_parent_id: string | null
+  recurrence_end_date: string | null
 }
 
 interface Source {
@@ -568,8 +628,8 @@ export const db = {
       const order = task.order ?? orderResult.next_order
 
       const stmt = getDb().prepare(`
-        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -582,6 +642,11 @@ export const db = {
         task.priority || null,
         order,
         task.category || null,
+        task.due_date || null,
+        task.recurrence_pattern || null,
+        task.recurrence_config || null,
+        task.recurring_parent_id || null,
+        task.recurrence_end_date || null,
         timestamp,
         timestamp
       )
@@ -641,6 +706,22 @@ export const db = {
         fields.push('category = ?')
         values.push(updates.category)
       }
+      if (updates.recurrence_pattern !== undefined) {
+        fields.push('recurrence_pattern = ?')
+        values.push(updates.recurrence_pattern)
+      }
+      if (updates.recurrence_config !== undefined) {
+        fields.push('recurrence_config = ?')
+        values.push(updates.recurrence_config)
+      }
+      if (updates.recurring_parent_id !== undefined) {
+        fields.push('recurring_parent_id = ?')
+        values.push(updates.recurring_parent_id)
+      }
+      if (updates.recurrence_end_date !== undefined) {
+        fields.push('recurrence_end_date = ?')
+        values.push(updates.recurrence_end_date)
+      }
 
       fields.push('updated_at = ?')
       values.push(now())
@@ -687,6 +768,113 @@ export const db = {
       `)
       const rows = stmt.all(projectId) as Array<{ category: string }>
       return rows.map(r => r.category)
+    },
+
+    /**
+     * Get all recurring parent tasks (tasks with recurrence_pattern set and no recurring_parent_id)
+     */
+    getRecurring(projectId?: string): Task[] {
+      if (projectId) {
+        const stmt = getDb().prepare(`
+          SELECT * FROM tasks
+          WHERE recurrence_pattern IS NOT NULL
+            AND recurring_parent_id IS NULL
+            AND project_id = ?
+            AND deleted_at IS NULL
+          ORDER BY due_date ASC
+        `)
+        return stmt.all(projectId) as Task[]
+      }
+
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE recurrence_pattern IS NOT NULL
+          AND recurring_parent_id IS NULL
+          AND deleted_at IS NULL
+        ORDER BY due_date ASC
+      `)
+      return stmt.all() as Task[]
+    },
+
+    /**
+     * Get instances of a recurring task (materialized occurrences)
+     */
+    getInstances(parentId: string): Task[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE recurring_parent_id = ?
+          AND deleted_at IS NULL
+        ORDER BY due_date ASC
+      `)
+      return stmt.all(parentId) as Task[]
+    },
+
+    /**
+     * Create a materialized instance of a recurring task for a specific date
+     */
+    createInstance(parentTask: Task, dueDate: string): Task {
+      const id = generateId()
+      const timestamp = now()
+
+      // Get next order number
+      const orderStmt = getDb().prepare(`
+        SELECT COALESCE(MAX("order"), -1) + 1 as next_order
+        FROM tasks
+        WHERE project_id ${parentTask.project_id === null ? 'IS NULL' : '= ?'}
+      `)
+      const orderResult = parentTask.project_id === null
+        ? orderStmt.get() as { next_order: number }
+        : orderStmt.get(parentTask.project_id) as { next_order: number }
+
+      const stmt = getDb().prepare(`
+        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, due_date, recurring_parent_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      stmt.run(
+        id,
+        parentTask.project_id,
+        parentTask.parent_task_id,
+        parentTask.title,
+        parentTask.description,
+        'todo',
+        parentTask.priority,
+        orderResult.next_order,
+        parentTask.category,
+        dueDate,
+        parentTask.id,
+        timestamp,
+        timestamp
+      )
+
+      return this.getById(id)!
+    },
+
+    /**
+     * Check if an instance exists for a recurring task on a specific date
+     */
+    hasInstanceOnDate(parentId: string, dueDate: string): boolean {
+      const stmt = getDb().prepare(`
+        SELECT COUNT(*) as count FROM tasks
+        WHERE recurring_parent_id = ?
+          AND due_date = ?
+          AND deleted_at IS NULL
+      `)
+      const result = stmt.get(parentId, dueDate) as { count: number }
+      return result.count > 0
+    },
+
+    /**
+     * Get tasks due on a specific date (including virtual recurring occurrences)
+     */
+    getDueOnDate(date: string): Task[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE due_date = ?
+          AND deleted_at IS NULL
+        ORDER BY "order" ASC
+      `)
+      return stmt.all(date) as Task[]
     }
   },
 
@@ -1017,21 +1205,34 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config?: string | null; recurring_parent_id?: string | null; recurrence_end_date?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
 
       const stmt = getDb().prepare(`
-        INSERT INTO quick_todos (id, title, description, list, priority, due_date, completed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+        INSERT INTO quick_todos (id, title, description, list, priority, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
       `)
 
-      stmt.run(id, todo.title, todo.description || null, todo.list, todo.priority || null, todo.due_date || null, timestamp, timestamp)
+      stmt.run(
+        id,
+        todo.title,
+        todo.description || null,
+        todo.list,
+        todo.priority || null,
+        todo.due_date || null,
+        todo.recurrence_pattern || null,
+        todo.recurrence_config || null,
+        todo.recurring_parent_id || null,
+        todo.recurrence_end_date || null,
+        timestamp,
+        timestamp
+      )
 
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config: string | null; recurrence_end_date: string | null }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 
@@ -1071,6 +1272,18 @@ export const db = {
           values.push(null)
         }
       }
+      if (updates.recurrence_pattern !== undefined) {
+        fields.push('recurrence_pattern = ?')
+        values.push(updates.recurrence_pattern)
+      }
+      if (updates.recurrence_config !== undefined) {
+        fields.push('recurrence_config = ?')
+        values.push(updates.recurrence_config)
+      }
+      if (updates.recurrence_end_date !== undefined) {
+        fields.push('recurrence_end_date = ?')
+        values.push(updates.recurrence_end_date)
+      }
 
       fields.push('updated_at = ?')
       values.push(now())
@@ -1085,6 +1298,95 @@ export const db = {
     delete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM quick_todos WHERE id = ?')
       stmt.run(id)
+    },
+
+    /**
+     * Get all recurring parent todos (todos with recurrence_pattern set and no recurring_parent_id)
+     */
+    getRecurring(list?: 'personal' | 'work' | 'tweaks'): QuickTodo[] {
+      if (list) {
+        const stmt = getDb().prepare(`
+          SELECT * FROM quick_todos
+          WHERE recurrence_pattern IS NOT NULL
+            AND recurring_parent_id IS NULL
+            AND list = ?
+          ORDER BY due_date ASC
+        `)
+        return stmt.all(list).map(this._mapRow) as QuickTodo[]
+      }
+
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE recurrence_pattern IS NOT NULL
+          AND recurring_parent_id IS NULL
+        ORDER BY due_date ASC
+      `)
+      return stmt.all().map(this._mapRow) as QuickTodo[]
+    },
+
+    /**
+     * Get instances of a recurring todo (materialized occurrences)
+     */
+    getInstances(parentId: string): QuickTodo[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE recurring_parent_id = ?
+        ORDER BY due_date ASC
+      `)
+      return stmt.all(parentId).map(this._mapRow) as QuickTodo[]
+    },
+
+    /**
+     * Create a materialized instance of a recurring todo for a specific date
+     */
+    createInstance(parentTodo: QuickTodo, dueDate: string): QuickTodo {
+      const id = generateId()
+      const timestamp = now()
+
+      const stmt = getDb().prepare(`
+        INSERT INTO quick_todos (id, title, description, list, priority, due_date, recurring_parent_id, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      `)
+
+      stmt.run(
+        id,
+        parentTodo.title,
+        parentTodo.description,
+        parentTodo.list,
+        parentTodo.priority,
+        dueDate,
+        parentTodo.id,
+        timestamp,
+        timestamp
+      )
+
+      return this.getById(id)!
+    },
+
+    /**
+     * Check if an instance exists for a recurring todo on a specific date
+     */
+    hasInstanceOnDate(parentId: string, dueDate: string): boolean {
+      const stmt = getDb().prepare(`
+        SELECT COUNT(*) as count FROM quick_todos
+        WHERE recurring_parent_id = ?
+          AND due_date = ?
+      `)
+      const result = stmt.get(parentId, dueDate) as { count: number }
+      return result.count > 0
+    },
+
+    /**
+     * Get todos due on a specific date
+     */
+    getDueOnDate(date: string): QuickTodo[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE due_date = ?
+          AND completed = 0
+        ORDER BY created_at ASC
+      `)
+      return stmt.all(date).map(this._mapRow) as QuickTodo[]
     },
 
     // Helper to convert SQLite row to QuickTodo (boolean conversion)

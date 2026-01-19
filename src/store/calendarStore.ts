@@ -9,6 +9,9 @@ export interface CalendarItem {
   completed: boolean
   projectId?: string | null
   projectName?: string
+  isRecurring?: boolean
+  isVirtualOccurrence?: boolean
+  recurringParentId?: string
 }
 
 interface CalendarState {
@@ -67,7 +70,9 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
             dueDate: task.due_date,
             completed: task.status === 'done',
             projectId: task.project_id,
-            projectName: (task as Task & { projectName?: string }).projectName
+            projectName: (task as Task & { projectName?: string }).projectName,
+            isRecurring: !!task.recurrence_pattern,
+            recurringParentId: task.recurring_parent_id || undefined
           })
         }
       }
@@ -84,9 +89,47 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
             title: todo.title,
             type: 'todo',
             dueDate: todo.due_date,
-            completed: todo.completed
+            completed: todo.completed,
+            isRecurring: !!todo.recurrence_pattern,
+            recurringParentId: todo.recurring_parent_id || undefined
           })
         }
+      }
+
+      // Add virtual recurring occurrences (30 days lookahead)
+      try {
+        const upcomingRecurring = await window.api.notifications.getUpcoming(30)
+
+        for (const recurring of upcomingRecurring) {
+          for (const date of recurring.dates) {
+            const dateKey = date.split('T')[0]
+
+            // Check if we already have an instance for this date (either materialized or regular)
+            const existingItems = itemsByDate[dateKey] || []
+            const alreadyExists = existingItems.some(item =>
+              item.recurringParentId === recurring.parentId ||
+              item.id === recurring.parentId
+            )
+
+            if (!alreadyExists) {
+              if (!itemsByDate[dateKey]) {
+                itemsByDate[dateKey] = []
+              }
+              itemsByDate[dateKey].push({
+                id: `virtual-${recurring.parentId}-${date}`,
+                title: recurring.title,
+                type: recurring.type,
+                dueDate: date,
+                completed: false,
+                isRecurring: true,
+                isVirtualOccurrence: true,
+                recurringParentId: recurring.parentId
+              })
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch recurring items for calendar:', err)
       }
 
       set({ itemsByDate, isLoading: false })

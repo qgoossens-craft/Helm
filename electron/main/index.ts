@@ -3,6 +3,7 @@ import { join } from 'path'
 import { initDatabase, db } from '../database/db'
 import * as ai from '../services/ai'
 import * as documents from '../services/documents'
+import * as notifications from '../services/notifications'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -202,6 +203,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:tasks:reorder', (_, taskId: string, newOrder: number) => db.tasks.reorder(taskId, newOrder))
   ipcMain.handle('db:tasks:getCategoriesByProject', (_, projectId: string) => db.tasks.getCategoriesByProject(projectId))
 
+  // Task Recurrence
+  ipcMain.handle('db:tasks:getRecurring', (_, projectId?: string) => db.tasks.getRecurring(projectId))
+  ipcMain.handle('db:tasks:getInstances', (_, parentId: string) => db.tasks.getInstances(parentId))
+  ipcMain.handle('db:tasks:createInstance', (_, parentTask, dueDate: string) => db.tasks.createInstance(parentTask, dueDate))
+  ipcMain.handle('db:tasks:hasInstanceOnDate', (_, parentId: string, dueDate: string) => db.tasks.hasInstanceOnDate(parentId, dueDate))
+  ipcMain.handle('db:tasks:getDueOnDate', (_, date: string) => db.tasks.getDueOnDate(date))
+
   // Activity Log
   ipcMain.handle('db:activity:log', (_, entry) => db.activityLog.log(entry))
   ipcMain.handle('db:activity:getRecent', (_, projectId?: string, limit?: number) =>
@@ -286,6 +294,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:quickTodos:update', (_, id: string, updates) => db.quickTodos.update(id, updates))
   ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
 
+  // QuickTodos Recurrence
+  ipcMain.handle('db:quickTodos:getRecurring', (_, list?: 'personal' | 'work' | 'tweaks') => db.quickTodos.getRecurring(list))
+  ipcMain.handle('db:quickTodos:getInstances', (_, parentId: string) => db.quickTodos.getInstances(parentId))
+  ipcMain.handle('db:quickTodos:createInstance', (_, parentTodo, dueDate: string) => db.quickTodos.createInstance(parentTodo, dueDate))
+  ipcMain.handle('db:quickTodos:hasInstanceOnDate', (_, parentId: string, dueDate: string) => db.quickTodos.hasInstanceOnDate(parentId, dueDate))
+  ipcMain.handle('db:quickTodos:getDueOnDate', (_, date: string) => db.quickTodos.getDueOnDate(date))
+
   // Sources (URL links)
   ipcMain.handle('db:sources:getByTask', (_, taskId: string) => db.sources.getByTask(taskId))
   ipcMain.handle('db:sources:getByQuickTodo', (_, quickTodoId: string) => db.sources.getByQuickTodo(quickTodoId))
@@ -302,6 +317,18 @@ function registerIpcHandlers(): void {
 
   // Stats
   ipcMain.handle('db:stats:getCompletionStats', () => db.stats.getCompletionStats())
+
+  // Notifications / Recurring Items
+  ipcMain.handle('notifications:getUpcoming', (_, days?: number) =>
+    notifications.getUpcomingRecurringItems(days))
+  ipcMain.handle('notifications:getDueToday', () =>
+    notifications.getItemsDueToday())
+  ipcMain.handle('notifications:materialize', (_, type: 'task' | 'todo', parentId: string) =>
+    notifications.materializeRecurringItem(type, parentId))
+  ipcMain.handle('notifications:notifyNow', () => {
+    notifications.notifyDueItems()
+    return { success: true }
+  })
 
   // AI Operations
   ipcMain.handle('ai:chat', async (_, message: string, projectId?: string, taskId?: string, quickTodoId?: string, conversationHistory?: ai.ConversationMessage[]) => {
@@ -381,6 +408,12 @@ app.whenReady().then(() => {
   // Create window
   createWindow()
 
+  // Set main window for notifications and start scheduler
+  if (mainWindow) {
+    notifications.setMainWindow(mainWindow)
+    notifications.startNotificationScheduler()
+  }
+
   // Register shortcuts
   registerGlobalShortcuts()
 
@@ -399,4 +432,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  notifications.stopNotificationScheduler()
 })
