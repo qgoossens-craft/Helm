@@ -121,7 +121,17 @@ export function DayView() {
   }, [dateContext, items.length, incompleteItems.length])
 
   const handleToggleComplete = async (item: CalendarItem) => {
-    if (item.type === 'task') {
+    // Handle virtual recurring occurrences
+    if (item.isVirtualOccurrence && item.recurringParentId) {
+      const dateKey = item.dueDate.split('T')[0]
+      if (item.completed) {
+        // Uncomplete: remove completion record
+        await window.api.recurringCompletions.uncomplete(item.recurringParentId, dateKey)
+      } else {
+        // Complete: add completion record
+        await window.api.recurringCompletions.complete(item.recurringParentId, item.type, dateKey)
+      }
+    } else if (item.type === 'task') {
       await updateTask(item.id, { status: item.completed ? 'todo' : 'done' })
     } else {
       await updateTodo(item.id, { completed: !item.completed })

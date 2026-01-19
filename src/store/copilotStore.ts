@@ -37,7 +37,7 @@ export const useCopilotStore = create<CopilotState>((set, get) => ({
       messages: [...state.messages, message]
     })),
 
-  clearMessages: () => set({ messages: [], linkedTask: null }),
+  clearMessages: () => set({ messages: [] }),
 
   setContext: (context) => {
     const { currentContext, clearMessages } = get()

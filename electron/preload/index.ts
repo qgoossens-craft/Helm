@@ -234,6 +234,11 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:tasks:getCategoriesByProject', projectId),
     createSubtasks: (parentTaskId: string, subtasks: Array<{ title: string; description?: string }>): Promise<string[]> =>
       ipcRenderer.invoke('tasks:create-subtasks', parentTaskId, subtasks),
+    // Batch methods to prevent N+1 queries
+    getSubtasksByParentIds: (parentIds: string[]): Promise<Record<string, Task[]>> =>
+      ipcRenderer.invoke('db:tasks:getSubtasksByParentIds', parentIds),
+    getAllWithDueDate: (): Promise<Task[]> =>
+      ipcRenderer.invoke('db:tasks:getAllWithDueDate'),
     // Recurrence methods
     getRecurring: (projectId?: string): Promise<Task[]> =>
       ipcRenderer.invoke('db:tasks:getRecurring', projectId),
@@ -259,7 +264,11 @@ contextBridge.exposeInMainWorld('api', {
   settings: {
     get: (key: string): Promise<string | null> => ipcRenderer.invoke('db:settings:get', key),
     set: (key: string, value: string): Promise<void> => ipcRenderer.invoke('db:settings:set', key, value),
-    getAll: (): Promise<Record<string, string>> => ipcRenderer.invoke('db:settings:getAll')
+    getAll: (): Promise<Record<string, string>> => ipcRenderer.invoke('db:settings:getAll'),
+    // Secure settings (encrypted)
+    setSecure: (key: string, value: string): Promise<void> => ipcRenderer.invoke('db:settings:setSecure', key, value),
+    getSecure: (key: string): Promise<string | null> => ipcRenderer.invoke('db:settings:getSecure', key),
+    isEncryptionAvailable: (): Promise<boolean> => ipcRenderer.invoke('db:settings:isEncryptionAvailable')
   },
 
   // AI Conversations (database)
@@ -297,7 +306,12 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('documents:delete', id),
     search: (query: string, projectId?: string, taskId?: string): Promise<DocumentSearchResult[]> =>
-      ipcRenderer.invoke('documents:search', query, projectId, taskId)
+      ipcRenderer.invoke('documents:search', query, projectId, taskId),
+    // Batch methods to prevent N+1 queries
+    getByTaskIds: (taskIds: string[]): Promise<Record<string, Document[]>> =>
+      ipcRenderer.invoke('db:documents:getByTaskIds', taskIds),
+    getByQuickTodoIds: (quickTodoIds: string[]): Promise<Record<string, Document[]>> =>
+      ipcRenderer.invoke('db:documents:getByQuickTodoIds', quickTodoIds)
   },
 
   // Quick Todos
@@ -318,6 +332,9 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:delete', id),
     getSubtasks: (parentId: string): Promise<QuickTodo[]> =>
       ipcRenderer.invoke('db:quickTodos:getSubtasks', parentId),
+    // Batch methods to prevent N+1 queries
+    getSubtasksByParentIds: (parentIds: string[]): Promise<Record<string, QuickTodo[]>> =>
+      ipcRenderer.invoke('db:quickTodos:getSubtasksByParentIds', parentIds),
     // Recurrence methods
     getRecurring: (list?: 'personal' | 'work' | 'tweaks'): Promise<QuickTodo[]> =>
       ipcRenderer.invoke('db:quickTodos:getRecurring', list),
@@ -348,7 +365,24 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('db:sources:delete', id),
     fetchMetadata: (url: string): Promise<UrlMetadata> =>
-      ipcRenderer.invoke('sources:fetchMetadata', url)
+      ipcRenderer.invoke('sources:fetchMetadata', url),
+    // Batch methods to prevent N+1 queries
+    getByTaskIds: (taskIds: string[]): Promise<Record<string, Source[]>> =>
+      ipcRenderer.invoke('db:sources:getByTaskIds', taskIds),
+    getByQuickTodoIds: (quickTodoIds: string[]): Promise<Record<string, Source[]>> =>
+      ipcRenderer.invoke('db:sources:getByQuickTodoIds', quickTodoIds)
+  },
+
+  // Recurring completions - tracks daily completion state for recurring items
+  recurringCompletions: {
+    complete: (parentId: string, parentType: 'task' | 'todo', completionDate: string): Promise<void> =>
+      ipcRenderer.invoke('db:recurringCompletions:complete', parentId, parentType, completionDate),
+    uncomplete: (parentId: string, completionDate: string): Promise<void> =>
+      ipcRenderer.invoke('db:recurringCompletions:uncomplete', parentId, completionDate),
+    isCompleted: (parentId: string, completionDate: string): Promise<boolean> =>
+      ipcRenderer.invoke('db:recurringCompletions:isCompleted', parentId, completionDate),
+    getCompletionsInRange: (startDate: string, endDate: string): Promise<Array<{ parent_id: string; parent_type: 'task' | 'todo'; completion_date: string }>> =>
+      ipcRenderer.invoke('db:recurringCompletions:getCompletionsInRange', startDate, endDate)
   },
 
   // Stats
@@ -457,6 +491,9 @@ declare global {
         get: (key: string) => Promise<string | null>
         set: (key: string, value: string) => Promise<void>
         getAll: () => Promise<Record<string, string>>
+        setSecure: (key: string, value: string) => Promise<void>
+        getSecure: (key: string) => Promise<string | null>
+        isEncryptionAvailable: () => Promise<boolean>
       }
       ai: {
         save: (conversation: Omit<AIConversation, 'id' | 'created_at'>) => Promise<AIConversation>
@@ -506,6 +543,12 @@ declare global {
         update: (id: string, updates: Partial<Pick<Source, 'title' | 'description' | 'favicon_url' | 'source_type'>>) => Promise<Source>
         delete: (id: string) => Promise<void>
         fetchMetadata: (url: string) => Promise<UrlMetadata>
+      }
+      recurringCompletions: {
+        complete: (parentId: string, parentType: 'task' | 'todo', completionDate: string) => Promise<void>
+        uncomplete: (parentId: string, completionDate: string) => Promise<void>
+        isCompleted: (parentId: string, completionDate: string) => Promise<boolean>
+        getCompletionsInRange: (startDate: string, endDate: string) => Promise<Array<{ parent_id: string; parent_type: 'task' | 'todo'; completion_date: string }>>
       }
       stats: {
         getCompletionStats: () => Promise<CompletionStats>

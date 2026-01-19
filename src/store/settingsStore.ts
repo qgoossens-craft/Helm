@@ -50,6 +50,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const allSettings = await window.api.settings.getAll()
       const theme = (allSettings.theme as ThemeId) || 'peach-gradient'
 
+      // Fetch the API key from secure storage
+      const apiKey = await window.api.settings.getSecure('openai_api_key')
+
       // Sync theme from DB to localStorage and DOM
       applyTheme(theme)
 
@@ -58,6 +61,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         settings: {
           ...defaultSettings,
           ...allSettings,
+          openai_api_key: apiKey || '',
           theme
         },
         isLoading: false
@@ -70,7 +74,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateSetting: async (key, value) => {
     set({ error: null })
     try {
-      await window.api.settings.set(key, value)
+      // Use secure storage for API keys
+      if (key === 'openai_api_key') {
+        await window.api.settings.setSecure(key, value)
+      } else {
+        await window.api.settings.set(key, value)
+      }
 
       // Apply theme immediately when changed
       if (key === 'theme') {
@@ -90,15 +99,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ error: null })
     try {
       await Promise.all([
-        window.api.settings.set('name', settings.name),
-        window.api.settings.set('openai_api_key', settings.openai_api_key),
-        window.api.settings.set('theme', settings.theme)
+        window.api.settings.set('name', settings.name || ''),
+        // Use secure storage for API key
+        window.api.settings.setSecure('openai_api_key', settings.openai_api_key || ''),
+        window.api.settings.set('theme', settings.theme || 'peach-gradient')
       ])
 
       // Apply theme
       applyTheme(settings.theme)
 
-      set({ settings })
+      set({ settings: settings as Settings })
     } catch (error) {
       set({ error: (error as Error).message })
       throw error

@@ -1,11 +1,34 @@
 import { app, BrowserWindow, ipcMain, globalShortcut, dialog, shell, net } from 'electron'
-import { join } from 'path'
+import { join, resolve, normalize } from 'path'
 import { initDatabase, db } from '../database/db'
 import * as ai from '../services/ai'
 import * as documents from '../services/documents'
 import * as notifications from '../services/notifications'
+import * as credentials from '../services/credentials'
 
 let mainWindow: BrowserWindow | null = null
+
+// Security: Validate file paths to prevent path traversal attacks
+function isPathWithinAllowedDirectories(filePath: string): boolean {
+  const normalizedPath = normalize(resolve(filePath))
+
+  // Allowed base directories
+  const allowedBases = [
+    app.getPath('userData'),    // App data directory
+    app.getPath('documents'),   // User documents
+    app.getPath('downloads'),   // Downloads folder
+    app.getPath('temp'),        // Temp directory
+    app.getPath('home'),        // Home directory (for Obsidian vaults)
+  ]
+
+  return allowedBases.some(base => normalizedPath.startsWith(normalize(base)))
+}
+
+function validateFilePath(filePath: string, operation: string): void {
+  if (!isPathWithinAllowedDirectories(filePath)) {
+    throw new Error(`Security: ${operation} blocked - path "${filePath}" is outside allowed directories`)
+  }
+}
 
 // URL metadata fetching
 interface UrlMetadata {
@@ -16,6 +39,10 @@ interface UrlMetadata {
 }
 
 async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
+  const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
+  const MAX_HTML_READ = 100 * 1024 // 100KB for metadata parsing
+  const TIMEOUT_MS = 10000 // 10 seconds
+
   try {
     // Normalize URL
     let normalizedUrl = url
@@ -36,78 +63,116 @@ async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
       sourceType = 'document'
     }
 
-    // Fetch page HTML to extract metadata
-    const response = await net.fetch(normalizedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    })
+    // Create abort controller for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
-    if (!response.ok) {
+    try {
+      const response = await net.fetch(normalizedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        signal: controller.signal
+      })
+
+      clearTimeout(timeoutId)
+
+      // Check response size from Content-Length header
+      const contentLength = response.headers.get('Content-Length')
+      if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
+        console.warn(`Response too large (${contentLength} bytes) for URL: ${url}`)
+        return {
+          title: hostname,
+          description: null,
+          favicon_url: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+          source_type: sourceType
+        }
+      }
+
+      if (!response.ok) {
+        return {
+          title: hostname,
+          description: null,
+          favicon_url: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+          source_type: sourceType
+        }
+      }
+
+      // Read only the first MAX_HTML_READ bytes for metadata parsing
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      let html = ''
+      let totalRead = 0
+      const decoder = new TextDecoder()
+
+      while (totalRead < MAX_HTML_READ) {
+        const { done, value } = await reader.read()
+        if (done) break
+        html += decoder.decode(value, { stream: true })
+        totalRead += value.length
+      }
+      reader.cancel() // Stop reading after we have enough
+
+      // Extract title
+      let title = hostname
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+      if (titleMatch) {
+        title = titleMatch[1].trim()
+        // Decode HTML entities
+        title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      }
+
+      // Extract description from meta tags
+      let description: string | null = null
+      const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
+      const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+      if (ogDescMatch) {
+        description = ogDescMatch[1].trim()
+      } else if (metaDescMatch) {
+        description = metaDescMatch[1].trim()
+      }
+      if (description) {
+        description = description.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      }
+
+      // Extract favicon - try multiple sources
+      let faviconUrl: string | null = null
+      const iconLinkMatch = html.match(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i)
+      const appleTouchMatch = html.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i)
+
+      if (iconLinkMatch) {
+        faviconUrl = iconLinkMatch[1]
+      } else if (appleTouchMatch) {
+        faviconUrl = appleTouchMatch[1]
+      }
+
+      // Make favicon URL absolute if relative
+      if (faviconUrl && !faviconUrl.startsWith('http')) {
+        if (faviconUrl.startsWith('//')) {
+          faviconUrl = 'https:' + faviconUrl
+        } else if (faviconUrl.startsWith('/')) {
+          faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}${faviconUrl}`
+        } else {
+          faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}/${faviconUrl}`
+        }
+      }
+
+      // Fallback to Google's favicon service
+      if (!faviconUrl) {
+        faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`
+      }
+
       return {
-        title: hostname,
-        description: null,
-        favicon_url: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+        title,
+        description,
+        favicon_url: faviconUrl,
         source_type: sourceType
       }
-    }
-
-    const html = await response.text()
-
-    // Extract title
-    let title = hostname
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    if (titleMatch) {
-      title = titleMatch[1].trim()
-      // Decode HTML entities
-      title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    }
-
-    // Extract description from meta tags
-    let description: string | null = null
-    const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
-    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-    if (ogDescMatch) {
-      description = ogDescMatch[1].trim()
-    } else if (metaDescMatch) {
-      description = metaDescMatch[1].trim()
-    }
-    if (description) {
-      description = description.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    }
-
-    // Extract favicon - try multiple sources
-    let faviconUrl: string | null = null
-    const iconLinkMatch = html.match(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i)
-    const appleTouchMatch = html.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i)
-
-    if (iconLinkMatch) {
-      faviconUrl = iconLinkMatch[1]
-    } else if (appleTouchMatch) {
-      faviconUrl = appleTouchMatch[1]
-    }
-
-    // Make favicon URL absolute if relative
-    if (faviconUrl && !faviconUrl.startsWith('http')) {
-      if (faviconUrl.startsWith('//')) {
-        faviconUrl = 'https:' + faviconUrl
-      } else if (faviconUrl.startsWith('/')) {
-        faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}${faviconUrl}`
-      } else {
-        faviconUrl = `${parsedUrl.protocol}//${parsedUrl.host}/${faviconUrl}`
-      }
-    }
-
-    // Fallback to Google's favicon service
-    if (!faviconUrl) {
-      faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`
-    }
-
-    return {
-      title,
-      description,
-      favicon_url: faviconUrl,
-      source_type: sourceType
+    } finally {
+      clearTimeout(timeoutId)
     }
   } catch (error) {
     console.error('Failed to fetch URL metadata:', error)
@@ -143,7 +208,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -202,6 +267,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:tasks:restore', (_, id: string) => db.tasks.restore(id))
   ipcMain.handle('db:tasks:reorder', (_, taskId: string, newOrder: number) => db.tasks.reorder(taskId, newOrder))
   ipcMain.handle('db:tasks:getCategoriesByProject', (_, projectId: string) => db.tasks.getCategoriesByProject(projectId))
+  // Batch methods to prevent N+1 queries
+  ipcMain.handle('db:tasks:getSubtasksByParentIds', (_, parentIds: string[]) => db.tasks.getSubtasksByParentIds(parentIds))
+  ipcMain.handle('db:tasks:getAllWithDueDate', () => db.tasks.getAllWithDueDate())
 
   // Task Recurrence
   ipcMain.handle('db:tasks:getRecurring', (_, projectId?: string) => db.tasks.getRecurring(projectId))
@@ -220,6 +288,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:settings:set', (_, key: string, value: string) => db.settings.set(key, value))
   ipcMain.handle('db:settings:getAll', () => db.settings.getAll())
 
+  // Secure settings (encrypted)
+  ipcMain.handle('db:settings:setSecure', (_, key: string, value: string) => {
+    credentials.setApiKey(key, value)
+  })
+  ipcMain.handle('db:settings:getSecure', (_, key: string) => {
+    return credentials.getApiKey(key)
+  })
+  ipcMain.handle('db:settings:isEncryptionAvailable', () => {
+    return credentials.isEncryptionAvailable()
+  })
+
   // AI Conversations (database)
   ipcMain.handle('db:ai:save', (_, conversation) => db.aiConversations.save(conversation))
   ipcMain.handle('db:ai:getByProject', (_, projectId: string) => db.aiConversations.getByProject(projectId))
@@ -229,6 +308,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:documents:getByTask', (_, taskId: string) => db.documents.getByTask(taskId))
   ipcMain.handle('db:documents:getByProject', (_, projectId: string) => db.documents.getByProject(projectId))
   ipcMain.handle('db:documents:getByQuickTodo', (_, quickTodoId: string) => db.documents.getByQuickTodo(quickTodoId))
+  // Batch methods to prevent N+1 queries
+  ipcMain.handle('db:documents:getByTaskIds', (_, taskIds: string[]) => db.documents.getByTaskIds(taskIds))
+  ipcMain.handle('db:documents:getByQuickTodoIds', (_, quickTodoIds: string[]) => db.documents.getByQuickTodoIds(quickTodoIds))
 
   // Document upload and processing
   ipcMain.handle('documents:upload', async (_, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => {
@@ -250,6 +332,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('documents:uploadFile', async (_, filePath: string, taskId: string | null, projectId: string | null, quickTodoId?: string | null) => {
+    validateFilePath(filePath, 'document upload')
     return documents.processUpload(filePath, taskId, projectId, quickTodoId)
   })
 
@@ -294,6 +377,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:quickTodos:update', (_, id: string, updates) => db.quickTodos.update(id, updates))
   ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
   ipcMain.handle('db:quickTodos:getSubtasks', (_, parentId: string) => db.quickTodos.getSubtasks(parentId))
+  // Batch method to prevent N+1 queries
+  ipcMain.handle('db:quickTodos:getSubtasksByParentIds', (_, parentIds: string[]) => db.quickTodos.getSubtasksByParentIds(parentIds))
 
   // QuickTodos Recurrence
   ipcMain.handle('db:quickTodos:getRecurring', (_, list?: 'personal' | 'work' | 'tweaks') => db.quickTodos.getRecurring(list))
@@ -310,6 +395,19 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:sources:create', (_, source) => db.sources.create(source))
   ipcMain.handle('db:sources:update', (_, id: string, updates) => db.sources.update(id, updates))
   ipcMain.handle('db:sources:delete', (_, id: string) => db.sources.delete(id))
+  // Batch methods to prevent N+1 queries
+  ipcMain.handle('db:sources:getByTaskIds', (_, taskIds: string[]) => db.sources.getByTaskIds(taskIds))
+  ipcMain.handle('db:sources:getByQuickTodoIds', (_, quickTodoIds: string[]) => db.sources.getByQuickTodoIds(quickTodoIds))
+
+  // Recurring completions
+  ipcMain.handle('db:recurringCompletions:complete', (_, parentId: string, parentType: 'task' | 'todo', completionDate: string) =>
+    db.recurringCompletions.complete(parentId, parentType, completionDate))
+  ipcMain.handle('db:recurringCompletions:uncomplete', (_, parentId: string, completionDate: string) =>
+    db.recurringCompletions.uncomplete(parentId, completionDate))
+  ipcMain.handle('db:recurringCompletions:isCompleted', (_, parentId: string, completionDate: string) =>
+    db.recurringCompletions.isCompleted(parentId, completionDate))
+  ipcMain.handle('db:recurringCompletions:getCompletionsInRange', (_, startDate: string, endDate: string) =>
+    db.recurringCompletions.getCompletionsInRange(startDate, endDate))
 
   // Sources - URL metadata fetching
   ipcMain.handle('sources:fetchMetadata', async (_, url: string) => {
@@ -391,10 +489,14 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('obsidian:listFiles', async (_, vaultPath: string) => {
+    validateFilePath(vaultPath, 'Obsidian vault listing')
     return documents.listObsidianFiles(vaultPath)
   })
 
   ipcMain.handle('obsidian:importFiles', async (_, filePaths: string[], projectId: string | null, taskId: string | null, quickTodoId?: string | null) => {
+    for (const fp of filePaths) {
+      validateFilePath(fp, 'Obsidian import')
+    }
     return documents.importObsidianFiles(filePaths, projectId, taskId, quickTodoId)
   })
 }

@@ -49,6 +49,9 @@ export function CopilotModal() {
         // Exclude completed tasks
         if (task.status === 'done') return false
 
+        // Exclude subtasks - only show top-level tasks
+        if (task.parent_task_id) return false
+
         // Filter by project if in project context
         if (copilotContext?.projectId && task.project_id !== copilotContext.projectId) {
           return false
@@ -95,14 +98,15 @@ export function CopilotModal() {
     setMentionSelectedIndex(0)
   }, [filteredTasks])
 
-  // Reset mention state when modal closes
+  // Reset state when modal closes
   useEffect(() => {
     if (!isCopilotOpen) {
       setShowMentionDropdown(false)
       setMentionQuery('')
       setMentionSelectedIndex(0)
+      setLinkedTask(null)
     }
-  }, [isCopilotOpen])
+  }, [isCopilotOpen, setLinkedTask])
 
   // Global escape key handler to close modal
   useEffect(() => {

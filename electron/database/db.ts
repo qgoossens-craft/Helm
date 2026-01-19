@@ -274,6 +274,52 @@ function runMigrations(db: Database.Database): void {
     db.exec(`UPDATE quick_todos SET status = CASE WHEN completed = 1 THEN 'done' ELSE 'todo' END`)
     console.log('Migration: Added status column to quick_todos')
   }
+
+  // Migration: Create recurring_completions table for tracking daily completions of recurring items
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recurring_completions (
+      id TEXT PRIMARY KEY,
+      parent_id TEXT NOT NULL,
+      parent_type TEXT NOT NULL CHECK (parent_type IN ('task', 'todo')),
+      completion_date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(parent_id, completion_date)
+    )
+  `)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_recurring_completions_parent ON recurring_completions(parent_id)`)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_recurring_completions_date ON recurring_completions(completion_date)`)
+
+  // ============================================================
+  // Performance indexes for common query patterns
+  // ============================================================
+
+  // Tasks: project_id + deleted_at for getByProject, getInbox queries
+  // Covers: WHERE project_id = ? AND deleted_at IS NULL
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_project_deleted ON tasks(project_id, deleted_at)`)
+
+  // Tasks: due_date + deleted_at for calendar/due date queries
+  // Covers: WHERE due_date = ? AND deleted_at IS NULL
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_due_deleted ON tasks(due_date, deleted_at)`)
+
+  // Tasks: status + completed_at for stats queries
+  // Covers: WHERE status = 'done' AND completed_at >= ? AND deleted_at IS NULL
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_status_completed ON tasks(status, completed_at)`)
+
+  // Quick todos: list + completed + parent for filtered list views
+  // Covers: WHERE list = ? AND completed = 0 AND parent_quick_todo_id IS NULL
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_list_completed_parent ON quick_todos(list, completed, parent_quick_todo_id)`)
+
+  // Quick todos: due_date + completed for calendar queries
+  // Covers: WHERE due_date = ? AND completed = 0
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_due_completed ON quick_todos(due_date, completed)`)
+
+  // Documents: task_id index for getByTask
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_task ON documents(task_id)`)
+
+  // Documents: project_id index for getByProject
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id)`)
+
+  console.log('Migration: Performance indexes created')
 }
 
 // Initialize database
@@ -795,6 +841,48 @@ export const db = {
     },
 
     /**
+     * Batch fetch subtasks by multiple parent task IDs
+     * Returns a map of parent_task_id -> subtasks[]
+     */
+    getSubtasksByParentIds(parentIds: string[]): Record<string, Task[]> {
+      if (parentIds.length === 0) return {}
+
+      const placeholders = parentIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE parent_task_id IN (${placeholders})
+          AND deleted_at IS NULL
+        ORDER BY "order" ASC, created_at ASC
+      `)
+      const subtasks = stmt.all(...parentIds) as Task[]
+
+      // Group by parent_task_id
+      const result: Record<string, Task[]> = {}
+      for (const parentId of parentIds) {
+        result[parentId] = []
+      }
+      for (const subtask of subtasks) {
+        if (subtask.parent_task_id) {
+          result[subtask.parent_task_id].push(subtask)
+        }
+      }
+      return result
+    },
+
+    /**
+     * Get all tasks with due dates (for calendar) - more efficient than fetching by project
+     */
+    getAllWithDueDate(): Task[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM tasks
+        WHERE due_date IS NOT NULL
+          AND deleted_at IS NULL
+        ORDER BY due_date ASC, "order" ASC
+      `)
+      return stmt.all() as Task[]
+    },
+
+    /**
      * Get all recurring parent tasks (tasks with recurrence_pattern set and no recurring_parent_id)
      */
     getRecurring(projectId?: string): Task[] {
@@ -1067,6 +1155,62 @@ export const db = {
         ORDER BY created_at DESC
       `)
       return stmt.all(quickTodoId) as Document[]
+    },
+
+    /**
+     * Batch fetch documents by multiple task IDs
+     * Returns a map of task_id -> documents[]
+     */
+    getByTaskIds(taskIds: string[]): Record<string, Document[]> {
+      if (taskIds.length === 0) return {}
+
+      const placeholders = taskIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM documents
+        WHERE task_id IN (${placeholders})
+        ORDER BY created_at DESC
+      `)
+      const docs = stmt.all(...taskIds) as Document[]
+
+      // Group by task_id
+      const result: Record<string, Document[]> = {}
+      for (const taskId of taskIds) {
+        result[taskId] = []
+      }
+      for (const doc of docs) {
+        if (doc.task_id) {
+          result[doc.task_id].push(doc)
+        }
+      }
+      return result
+    },
+
+    /**
+     * Batch fetch documents by multiple quick todo IDs
+     * Returns a map of quick_todo_id -> documents[]
+     */
+    getByQuickTodoIds(quickTodoIds: string[]): Record<string, Document[]> {
+      if (quickTodoIds.length === 0) return {}
+
+      const placeholders = quickTodoIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM documents
+        WHERE quick_todo_id IN (${placeholders})
+        ORDER BY created_at DESC
+      `)
+      const docs = stmt.all(...quickTodoIds) as Document[]
+
+      // Group by quick_todo_id
+      const result: Record<string, Document[]> = {}
+      for (const id of quickTodoIds) {
+        result[id] = []
+      }
+      for (const doc of docs) {
+        if (doc.quick_todo_id) {
+          result[doc.quick_todo_id].push(doc)
+        }
+      }
+      return result
     },
 
     getByProject(projectId: string): Document[] {
@@ -1365,6 +1509,34 @@ export const db = {
     },
 
     /**
+     * Batch fetch subtasks by multiple parent todo IDs
+     * Returns a map of parent_quick_todo_id -> subtasks[]
+     */
+    getSubtasksByParentIds(parentIds: string[]): Record<string, QuickTodo[]> {
+      if (parentIds.length === 0) return {}
+
+      const placeholders = parentIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE parent_quick_todo_id IN (${placeholders})
+        ORDER BY created_at ASC
+      `)
+      const subtasks = stmt.all(...parentIds).map(this._mapRow) as QuickTodo[]
+
+      // Group by parent_quick_todo_id
+      const result: Record<string, QuickTodo[]> = {}
+      for (const parentId of parentIds) {
+        result[parentId] = []
+      }
+      for (const subtask of subtasks) {
+        if (subtask.parent_quick_todo_id) {
+          result[subtask.parent_quick_todo_id].push(subtask)
+        }
+      }
+      return result
+    },
+
+    /**
      * Get all recurring parent todos (todos with recurrence_pattern set and no recurring_parent_id)
      */
     getRecurring(list?: 'personal' | 'work' | 'tweaks'): QuickTodo[] {
@@ -1513,6 +1685,62 @@ export const db = {
       return stmt.all(quickTodoId) as Source[]
     },
 
+    /**
+     * Batch fetch sources by multiple task IDs
+     * Returns a map of task_id -> sources[]
+     */
+    getByTaskIds(taskIds: string[]): Record<string, Source[]> {
+      if (taskIds.length === 0) return {}
+
+      const placeholders = taskIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM sources
+        WHERE task_id IN (${placeholders})
+        ORDER BY created_at DESC
+      `)
+      const sources = stmt.all(...taskIds) as Source[]
+
+      // Group by task_id
+      const result: Record<string, Source[]> = {}
+      for (const taskId of taskIds) {
+        result[taskId] = []
+      }
+      for (const source of sources) {
+        if (source.task_id) {
+          result[source.task_id].push(source)
+        }
+      }
+      return result
+    },
+
+    /**
+     * Batch fetch sources by multiple quick todo IDs
+     * Returns a map of quick_todo_id -> sources[]
+     */
+    getByQuickTodoIds(quickTodoIds: string[]): Record<string, Source[]> {
+      if (quickTodoIds.length === 0) return {}
+
+      const placeholders = quickTodoIds.map(() => '?').join(',')
+      const stmt = getDb().prepare(`
+        SELECT * FROM sources
+        WHERE quick_todo_id IN (${placeholders})
+        ORDER BY created_at DESC
+      `)
+      const sources = stmt.all(...quickTodoIds) as Source[]
+
+      // Group by quick_todo_id
+      const result: Record<string, Source[]> = {}
+      for (const id of quickTodoIds) {
+        result[id] = []
+      }
+      for (const source of sources) {
+        if (source.quick_todo_id) {
+          result[source.quick_todo_id].push(source)
+        }
+      }
+      return result
+    },
+
     getByProject(projectId: string): Source[] {
       const stmt = getDb().prepare(`
         SELECT * FROM sources
@@ -1558,6 +1786,68 @@ export const db = {
     delete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM sources WHERE id = ?')
       stmt.run(id)
+    }
+  },
+
+  // Recurring completions - tracks which dates a recurring item has been completed
+  recurringCompletions: {
+    /**
+     * Mark a recurring item as complete for a specific date
+     */
+    complete(parentId: string, parentType: 'task' | 'todo', completionDate: string): void {
+      const id = generateId()
+      const stmt = getDb().prepare(`
+        INSERT OR IGNORE INTO recurring_completions (id, parent_id, parent_type, completion_date)
+        VALUES (?, ?, ?, ?)
+      `)
+      stmt.run(id, parentId, parentType, completionDate)
+    },
+
+    /**
+     * Mark a recurring item as incomplete for a specific date
+     */
+    uncomplete(parentId: string, completionDate: string): void {
+      const stmt = getDb().prepare(`
+        DELETE FROM recurring_completions
+        WHERE parent_id = ? AND completion_date = ?
+      `)
+      stmt.run(parentId, completionDate)
+    },
+
+    /**
+     * Check if a recurring item is completed for a specific date
+     */
+    isCompleted(parentId: string, completionDate: string): boolean {
+      const stmt = getDb().prepare(`
+        SELECT COUNT(*) as count FROM recurring_completions
+        WHERE parent_id = ? AND completion_date = ?
+      `)
+      const result = stmt.get(parentId, completionDate) as { count: number }
+      return result.count > 0
+    },
+
+    /**
+     * Get all completion dates for a recurring item
+     */
+    getCompletionDates(parentId: string): string[] {
+      const stmt = getDb().prepare(`
+        SELECT completion_date FROM recurring_completions
+        WHERE parent_id = ?
+        ORDER BY completion_date DESC
+      `)
+      const results = stmt.all(parentId) as Array<{ completion_date: string }>
+      return results.map(r => r.completion_date)
+    },
+
+    /**
+     * Get all completions for a date range (for calendar display)
+     */
+    getCompletionsInRange(startDate: string, endDate: string): Array<{ parent_id: string; parent_type: 'task' | 'todo'; completion_date: string }> {
+      const stmt = getDb().prepare(`
+        SELECT parent_id, parent_type, completion_date FROM recurring_completions
+        WHERE completion_date >= ? AND completion_date <= ?
+      `)
+      return stmt.all(startDate, endDate) as Array<{ parent_id: string; parent_type: 'task' | 'todo'; completion_date: string }>
     }
   },
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Plus, ChevronDown } from 'lucide-react'
-import { useQuickTodosStore, useCalendarStore } from '../store'
+import { useQuickTodosStore } from '../store'
 
 type TodoList = 'personal' | 'work' | 'tweaks'
 
@@ -52,8 +52,6 @@ export function QuickTodoInput({ dueDate }: QuickTodoInputProps) {
         due_date: dueDate
       })
       setTitle('')
-      // Refresh calendar to update the dot count
-      useCalendarStore.getState().fetchItems()
     } catch (err) {
       console.error('Failed to create todo:', err)
     } finally {

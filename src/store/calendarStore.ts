@@ -33,25 +33,22 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   fetchItems: async () => {
     set({ isLoading: true, error: null })
     try {
-      // Fetch all tasks and todos, then filter client-side
-      // This is simpler than adding new backend APIs
-      const [allTodos, inboxTasks] = await Promise.all([
+      // Fetch all tasks with due dates and todos in parallel (single query each - no N+1)
+      // Also fetch projects to map project names to tasks
+      const [allTodos, tasksWithDueDate, projects] = await Promise.all([
         window.api.quickTodos.getAll(),
-        window.api.tasks.getInbox()
+        window.api.tasks.getAllWithDueDate(),
+        window.api.projects.getAll()
       ])
 
-      // Get all projects to fetch their tasks
-      const projects = await window.api.projects.getAll()
-      const projectTasksPromises = projects.map(p =>
-        window.api.tasks.getByProject(p.id).then(tasks =>
-          tasks.map(t => ({ ...t, projectName: p.name }))
-        )
-      )
-      const projectTasksArrays = await Promise.all(projectTasksPromises)
-      const allProjectTasks = projectTasksArrays.flat()
+      // Create a project lookup map for efficient name resolution
+      const projectMap = new Map(projects.map(p => [p.id, p.name]))
 
-      // Combine all tasks
-      const allTasks = [...inboxTasks, ...allProjectTasks]
+      // Add project names to tasks
+      const allTasks = tasksWithDueDate.map(t => ({
+        ...t,
+        projectName: t.project_id ? projectMap.get(t.project_id) : undefined
+      }))
 
       // Build the items by date map
       const itemsByDate: Record<string, CalendarItem[]> = {}
@@ -100,6 +97,17 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       try {
         const upcomingRecurring = await window.api.notifications.getUpcoming(30)
 
+        // Get date range for completions query (today to 30 days ahead)
+        const today = new Date()
+        const endDate = new Date(today)
+        endDate.setDate(endDate.getDate() + 30)
+        const startDateStr = today.toISOString().split('T')[0]
+        const endDateStr = endDate.toISOString().split('T')[0]
+
+        // Fetch recurring completions for the date range
+        const completions = await window.api.recurringCompletions.getCompletionsInRange(startDateStr, endDateStr)
+        const completionSet = new Set(completions.map(c => `${c.parent_id}-${c.completion_date}`))
+
         for (const recurring of upcomingRecurring) {
           for (const date of recurring.dates) {
             const dateKey = date.split('T')[0]
@@ -115,12 +123,16 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
               if (!itemsByDate[dateKey]) {
                 itemsByDate[dateKey] = []
               }
+
+              // Check if this occurrence has been completed
+              const isCompleted = completionSet.has(`${recurring.parentId}-${dateKey}`)
+
               itemsByDate[dateKey].push({
                 id: `virtual-${recurring.parentId}-${date}`,
                 title: recurring.title,
                 type: recurring.type,
                 dueDate: date,
-                completed: false,
+                completed: isCompleted,
                 isRecurring: true,
                 isVirtualOccurrence: true,
                 recurringParentId: recurring.parentId

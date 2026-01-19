@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { db } from '../database/db'
 import { searchDocuments } from './documents'
+import { getApiKey } from './credentials'
 
 // Conversation message type for history
 export interface ConversationMessage {
@@ -292,6 +293,20 @@ export function buildContext(projectId?: string, taskId?: string, quickTodoId?: 
         time: a.created_at
       }))
 
+      // If no task-specific documents, get project-level documents
+      if (!context.attachedDocuments || context.attachedDocuments.length === 0) {
+        const projectDocs = db.documents.getByProject(projectId)
+        if (projectDocs.length > 0) {
+          context.attachedDocuments = projectDocs
+            .filter(d => d.processing_status === 'completed')
+            .slice(0, 5)
+            .map(d => ({
+              name: d.name,
+              extractedText: d.extracted_text ? d.extracted_text.substring(0, 2000) : null
+            }))
+        }
+      }
+
       // If no task-specific sources, get project-level sources
       if (!context.attachedSources || context.attachedSources.length === 0) {
         const projectSources = db.sources.getByProject(projectId)
@@ -471,7 +486,7 @@ export async function chat(
   quickTodoId?: string,
   conversationHistory: ConversationMessage[] = []
 ): Promise<CopilotResponse> {
-  const apiKey = db.settings.get('openai_api_key')
+  const apiKey = getApiKey('openai_api_key')
   if (!apiKey) {
     throw new Error('OpenAI API key not configured. Please add it in Settings.')
   }
@@ -564,7 +579,7 @@ export interface ParsedProject {
 }
 
 export async function parseProjectBrainDump(brainDump: string): Promise<ParsedProject> {
-  const apiKey = db.settings.get('openai_api_key')
+  const apiKey = getApiKey('openai_api_key')
   if (!apiKey) {
     throw new Error('OpenAI API key not configured. Please add it in Settings.')
   }
@@ -639,7 +654,7 @@ export async function suggestTaskBreakdown(
   taskTitle: string,
   projectContext?: string
 ): Promise<string[]> {
-  const apiKey = db.settings.get('openai_api_key')
+  const apiKey = getApiKey('openai_api_key')
   if (!apiKey) {
     throw new Error('OpenAI API key not configured. Please add it in Settings.')
   }

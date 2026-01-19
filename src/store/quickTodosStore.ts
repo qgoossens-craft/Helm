@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import type { QuickTodo } from '../types/global'
 
+// Helper to notify calendar store of changes - prevents stale data
+// Import is deferred to avoid circular dependency
+const notifyCalendarStore = () => {
+  // Dynamic import to avoid circular dependency at module load time
+  import('./calendarStore').then(({ useCalendarStore }) => {
+    useCalendarStore.getState().fetchItems()
+  })
+}
+
 interface QuickTodosState {
   todos: QuickTodo[]
   dueTodayTodos: QuickTodo[]
@@ -67,6 +76,9 @@ export const useQuickTodosStore = create<QuickTodosState>((set, get) => ({
         details: `Created quick todo: ${todo.title}`
       })
 
+      // Notify calendar store of change
+      notifyCalendarStore()
+
       return todo
     } catch (error) {
       set({ error: (error as Error).message })
@@ -83,6 +95,9 @@ export const useQuickTodosStore = create<QuickTodosState>((set, get) => ({
         dueTodayTodos: state.dueTodayTodos.map((t) => (t.id === id ? todo : t)),
         overdueTodos: state.overdueTodos.map((t) => (t.id === id ? todo : t))
       }))
+
+      // Notify calendar store of change
+      notifyCalendarStore()
     } catch (error) {
       set({ error: (error as Error).message })
       throw error
@@ -98,6 +113,9 @@ export const useQuickTodosStore = create<QuickTodosState>((set, get) => ({
         dueTodayTodos: state.dueTodayTodos.filter((t) => t.id !== id),
         overdueTodos: state.overdueTodos.filter((t) => t.id !== id)
       }))
+
+      // Notify calendar store of change
+      notifyCalendarStore()
     } catch (error) {
       set({ error: (error as Error).message })
       throw error
