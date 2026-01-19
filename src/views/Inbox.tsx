@@ -26,6 +26,14 @@ export function Inbox() {
     fetchProjects()
   }, [fetchInbox, fetchProjects])
 
+  // Auto-refresh inbox every 10s to catch external changes (e.g., from Apple Reminders sync daemon)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchInbox()
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [fetchInbox])
+
   // Get the selected task from the store (always up-to-date)
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null
