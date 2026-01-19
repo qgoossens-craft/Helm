@@ -889,7 +889,7 @@ export function Project() {
         <div className="p-2 border-t border-helm-border">
           <button
             onClick={() => openCopilot({ projectId: id })}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-primary/10 text-sm text-helm-text-muted hover:text-helm-primary transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-primary/10 text-sm text-helm-text-muted hover:text-helm-primary transition-colors"
           >
             <Sparkles size={16} className="text-helm-primary" />
             <span>Ask Jeeves</span>

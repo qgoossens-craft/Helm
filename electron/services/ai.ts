@@ -139,7 +139,7 @@ interface AIContext {
     completed: number
     inProgress: number
     todo: number
-    taskList: Array<{ title: string; status: string }>
+    taskList: Array<{ title: string; status: string; priority: string | null; dueDate: string | null }>
   }
   recentActivity?: Array<{
     action: string
@@ -277,7 +277,12 @@ export function buildContext(projectId?: string, taskId?: string, quickTodoId?: 
         completed: tasks.filter(t => t.status === 'done').length,
         inProgress: tasks.filter(t => t.status === 'in_progress').length,
         todo: tasks.filter(t => t.status === 'todo').length,
-        taskList: tasks.slice(0, 10).map(t => ({ title: t.title, status: t.status }))
+        taskList: tasks.slice(0, 15).map(t => ({
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          dueDate: t.due_date
+        }))
       }
 
       const activity = db.activityLog.getRecent(projectId, 5)
@@ -361,6 +366,39 @@ CURRENT PROJECT: "${context.currentProject.name}"
   }
 
   if (context.projectTasks) {
+    // Helper to format due date relative to now
+    const formatDueDate = (dueDate: string | null): string => {
+      if (!dueDate) return ''
+      const due = new Date(dueDate)
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate())
+      const diffDays = Math.round((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (diffDays < 0) return `⚠️ OVERDUE by ${Math.abs(diffDays)} day${Math.abs(diffDays) > 1 ? 's' : ''}`
+      if (diffDays === 0) return '📅 due TODAY'
+      if (diffDays === 1) return '📅 due Tomorrow'
+      if (diffDays <= 7) return `📅 due in ${diffDays} days`
+      return `📅 due ${due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    }
+
+    // Helper to format priority
+    const formatPriority = (priority: string | null): string => {
+      if (!priority) return ''
+      const icons: Record<string, string> = { high: '🔴', medium: '🟡', low: '🟢' }
+      return icons[priority] ? `${icons[priority]} ${priority}` : priority
+    }
+
+    // Format task line with metadata
+    const formatTaskLine = (t: { title: string; status: string; priority: string | null; dueDate: string | null }): string => {
+      const parts = [`- [${t.status}] ${t.title}`]
+      const meta: string[] = []
+      if (t.priority) meta.push(formatPriority(t.priority))
+      if (t.dueDate && t.status !== 'done') meta.push(formatDueDate(t.dueDate))
+      if (meta.length > 0) parts.push(`(${meta.join(', ')})`)
+      return parts.join(' ')
+    }
+
     prompt += `
 
 TASKS: ${context.projectTasks.completed}/${context.projectTasks.total} completed
@@ -369,7 +407,7 @@ TASKS: ${context.projectTasks.completed}/${context.projectTasks.total} completed
 - Done: ${context.projectTasks.completed}
 
 Current tasks:
-${context.projectTasks.taskList.map(t => `- [${t.status}] ${t.title}`).join('\n')}`
+${context.projectTasks.taskList.map(formatTaskLine).join('\n')}`
   }
 
   // Attached documents (task/quick todo specific)

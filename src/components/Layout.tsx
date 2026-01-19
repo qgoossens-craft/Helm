@@ -145,9 +145,9 @@ export function Layout() {
         <div className="p-2 border-t border-helm-border">
           <NavLink
             to="/settings"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-surface-elevated text-sm text-helm-text transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-helm-primary/10 text-sm text-helm-text-muted hover:text-helm-primary transition-colors"
           >
-            <Settings size={16} />
+            <Settings size={16} className="text-helm-primary" />
             <span>Settings</span>
           </NavLink>
         </div>
