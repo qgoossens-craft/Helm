@@ -253,6 +253,27 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE quick_todos ADD COLUMN recurrence_end_date TEXT DEFAULT NULL`)
     console.log('Migration: Added recurrence_end_date column to quick_todos')
   }
+
+  // Migration: Add parent_quick_todo_id column for subtasks
+  const quickTodosInfoSubtasks = db.prepare("PRAGMA table_info(quick_todos)").all() as Array<{ name: string }>
+  const quickTodosColumnsSubtasks = quickTodosInfoSubtasks.map(col => col.name)
+
+  if (!quickTodosColumnsSubtasks.includes('parent_quick_todo_id')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN parent_quick_todo_id TEXT REFERENCES quick_todos(id) ON DELETE CASCADE`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_quick_todos_parent ON quick_todos(parent_quick_todo_id)`)
+    console.log('Migration: Added parent_quick_todo_id column to quick_todos')
+  }
+
+  // Migration: Add status column to quick_todos (migrate from completed boolean)
+  const quickTodosInfoStatus = db.prepare("PRAGMA table_info(quick_todos)").all() as Array<{ name: string }>
+  const quickTodosColumnsStatus = quickTodosInfoStatus.map(col => col.name)
+
+  if (!quickTodosColumnsStatus.includes('status')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN status TEXT DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'done'))`)
+    // Migrate existing data: completed=1 becomes 'done', completed=0 becomes 'todo'
+    db.exec(`UPDATE quick_todos SET status = CASE WHEN completed = 1 THEN 'done' ELSE 'todo' END`)
+    console.log('Migration: Added status column to quick_todos')
+  }
 }
 
 // Initialize database
@@ -413,6 +434,7 @@ interface QuickTodo {
   title: string
   description: string | null
   list: 'personal' | 'work' | 'tweaks'
+  status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
   completed: boolean
@@ -424,6 +446,8 @@ interface QuickTodo {
   recurrence_config: string | null
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  // Subtask field
+  parent_quick_todo_id: string | null
 }
 
 interface Source {
@@ -1158,7 +1182,7 @@ export const db = {
   // Quick Todos
   quickTodos: {
     getAll(list?: 'personal' | 'work' | 'tweaks'): QuickTodo[] {
-      // Filter out completed items older than 24 hours
+      // Filter out completed items older than 24 hours and exclude subtasks
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
       if (list) {
@@ -1166,6 +1190,7 @@ export const db = {
           SELECT * FROM quick_todos
           WHERE list = ?
             AND (completed = 0 OR completed_at > ?)
+            AND parent_quick_todo_id IS NULL
           ORDER BY completed ASC, created_at DESC
         `)
         return stmt.all(list, cutoff).map(this._mapRow) as QuickTodo[]
@@ -1173,7 +1198,8 @@ export const db = {
 
       const stmt = getDb().prepare(`
         SELECT * FROM quick_todos
-        WHERE completed = 0 OR completed_at > ?
+        WHERE (completed = 0 OR completed_at > ?)
+          AND parent_quick_todo_id IS NULL
         ORDER BY completed ASC, created_at DESC
       `)
       return stmt.all(cutoff).map(this._mapRow) as QuickTodo[]
@@ -1205,13 +1231,15 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config?: string | null; recurring_parent_id?: string | null; recurrence_end_date?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config?: string | null; recurring_parent_id?: string | null; recurrence_end_date?: string | null; parent_quick_todo_id?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
+      const status = todo.status || 'todo'
+      const completed = status === 'done' ? 1 : 0
 
       const stmt = getDb().prepare(`
-        INSERT INTO quick_todos (id, title, description, list, priority, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, completed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        INSERT INTO quick_todos (id, title, description, list, status, priority, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, parent_quick_todo_id, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -1219,12 +1247,15 @@ export const db = {
         todo.title,
         todo.description || null,
         todo.list,
+        status,
         todo.priority || null,
         todo.due_date || null,
         todo.recurrence_pattern || null,
         todo.recurrence_config || null,
         todo.recurring_parent_id || null,
         todo.recurrence_end_date || null,
+        todo.parent_quick_todo_id || null,
+        completed,
         timestamp,
         timestamp
       )
@@ -1232,7 +1263,7 @@ export const db = {
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config: string | null; recurrence_end_date: string | null }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config: string | null; recurrence_end_date: string | null }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 
@@ -1251,6 +1282,23 @@ export const db = {
         fields.push('list = ?')
         values.push(updates.list)
       }
+      if (updates.status !== undefined) {
+        fields.push('status = ?')
+        values.push(updates.status)
+
+        // Sync completed boolean with status
+        if (updates.status === 'done' && current.status !== 'done') {
+          fields.push('completed = ?')
+          values.push(1)
+          fields.push('completed_at = ?')
+          values.push(now())
+        } else if (updates.status !== 'done' && current.status === 'done') {
+          fields.push('completed = ?')
+          values.push(0)
+          fields.push('completed_at = ?')
+          values.push(null)
+        }
+      }
       if (updates.priority !== undefined) {
         fields.push('priority = ?')
         values.push(updates.priority)
@@ -1263,11 +1311,15 @@ export const db = {
         fields.push('completed = ?')
         values.push(updates.completed ? 1 : 0)
 
-        // Set completed_at when marking complete
+        // Sync status with completed boolean
         if (updates.completed && !current.completed) {
+          fields.push('status = ?')
+          values.push('done')
           fields.push('completed_at = ?')
           values.push(now())
         } else if (!updates.completed && current.completed) {
+          fields.push('status = ?')
+          values.push('todo')
           fields.push('completed_at = ?')
           values.push(null)
         }
@@ -1298,6 +1350,18 @@ export const db = {
     delete(id: string): void {
       const stmt = getDb().prepare('DELETE FROM quick_todos WHERE id = ?')
       stmt.run(id)
+    },
+
+    /**
+     * Get subtasks for a parent todo
+     */
+    getSubtasks(parentId: string): QuickTodo[] {
+      const stmt = getDb().prepare(`
+        SELECT * FROM quick_todos
+        WHERE parent_quick_todo_id = ?
+        ORDER BY created_at ASC
+      `)
+      return stmt.all(parentId).map(this._mapRow) as QuickTodo[]
     },
 
     /**

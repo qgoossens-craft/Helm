@@ -129,6 +129,7 @@ export interface QuickTodo {
   title: string
   description: string | null
   list: 'personal' | 'work' | 'tweaks'
+  status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | null
   due_date: string | null
   completed: boolean
@@ -140,6 +141,8 @@ export interface QuickTodo {
   recurrence_config: string | null
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  // Subtask field
+  parent_quick_todo_id: string | null
 }
 
 export interface Source {
@@ -307,12 +310,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('db:quickTodos:getDueToday'),
     getOverdue: (): Promise<QuickTodo[]> =>
       ipcRenderer.invoke('db:quickTodos:getOverdue'),
-    create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }): Promise<QuickTodo> =>
+    create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; parent_quick_todo_id?: string | null }): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:create', todo),
-    update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>): Promise<QuickTodo> =>
+    update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>): Promise<QuickTodo> =>
       ipcRenderer.invoke('db:quickTodos:update', id, updates),
     delete: (id: string): Promise<void> =>
       ipcRenderer.invoke('db:quickTodos:delete', id),
+    getSubtasks: (parentId: string): Promise<QuickTodo[]> =>
+      ipcRenderer.invoke('db:quickTodos:getSubtasks', parentId),
     // Recurrence methods
     getRecurring: (list?: 'personal' | 'work' | 'tweaks'): Promise<QuickTodo[]> =>
       ipcRenderer.invoke('db:quickTodos:getRecurring', list),
@@ -481,9 +486,10 @@ declare global {
         getById: (id: string) => Promise<QuickTodo | null>
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
-        create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; due_date?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>) => Promise<QuickTodo>
+        create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; parent_quick_todo_id?: string | null }) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
+        getSubtasks: (parentId: string) => Promise<QuickTodo[]>
         // Recurrence methods
         getRecurring: (list?: 'personal' | 'work' | 'tweaks') => Promise<QuickTodo[]>
         getInstances: (parentId: string) => Promise<QuickTodo[]>

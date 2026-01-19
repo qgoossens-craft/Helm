@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe } from 'lucide-react'
+import { X, Check, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useTasksStore, useUIStore, useSettingsStore, useCalendarStore } from '../store'
@@ -68,7 +68,7 @@ export function TaskDetailPanel({ task, onClose, projectId, focusTitle }: TaskDe
   })
 
   const { tasks, updateTask, createTask, deleteTask, projectCategories, fetchCategoriesByProject } = useTasksStore()
-  const { openObsidianBrowser, isObsidianBrowserOpen } = useUIStore()
+  const { openObsidianBrowser, isObsidianBrowserOpen, openCopilot } = useUIStore()
   const { settings } = useSettingsStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
@@ -510,8 +510,26 @@ export function TaskDetailPanel({ task, onClose, projectId, focusTitle }: TaskDe
       className="w-80 h-full bg-helm-surface rounded-2xl flex flex-col animate-slide-in-right"
     >
       {/* Header */}
-      <div className="p-4 border-b border-helm-border">
+      <div className="flex items-center justify-between p-4 border-b border-helm-border">
         <span className="text-xs text-helm-text-muted">Task Details</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => openCopilot({ taskId: task.id, projectId: projectId ?? undefined })}
+            className="p-1.5 text-helm-text-muted hover:text-helm-primary hover:bg-helm-surface-elevated rounded transition-colors"
+            title="Ask Jeeves"
+          >
+            <Sparkles size={18} />
+          </button>
+          <button
+            onClick={() => {
+              handleSave()
+              onClose()
+            }}
+            className="p-1.5 text-helm-text-muted hover:text-helm-text hover:bg-helm-surface-elevated rounded transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}

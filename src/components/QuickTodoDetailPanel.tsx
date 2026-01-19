@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe, Sparkles } from 'lucide-react'
+import { X, Plus, Trash2, FileText, Image, File, ChevronDown, ChevronRight, Loader2, AlertCircle, CheckCircle2, Pencil, BookOpen, Calendar, Link, ExternalLink, Video, FileIcon, Globe, Sparkles, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useQuickTodosStore, useUIStore, useSettingsStore, useCalendarStore } from '../store'
@@ -47,6 +47,8 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
   })
   const [dueDate, setDueDate] = useState<string | null>(todo.due_date)
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [status, setStatus] = useState<'todo' | 'in_progress' | 'done'>(todo.status)
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | null>(todo.priority)
   const [sources, setSources] = useState<Source[]>([])
   const [showSources, setShowSources] = useState(true)
   const [isAddingSource, setIsAddingSource] = useState(false)
@@ -56,6 +58,12 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     isOpen: false,
     source: null
   })
+
+  // Subtask state
+  const [subtasks, setSubtasks] = useState<QuickTodo[]>([])
+  const [showSubtasks, setShowSubtasks] = useState(true)
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false)
+  const [newSubtask, setNewSubtask] = useState('')
 
   const { updateTodo } = useQuickTodosStore()
   const { openObsidianBrowser, isObsidianBrowserOpen, openCopilot } = useUIStore()
@@ -68,6 +76,8 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     setTitle(todo.title)
     setDescription(todo.description || '')
     setDueDate(todo.due_date)
+    setStatus(todo.status)
+    setPriority(todo.priority)
     // Auto-resize title textarea after todo changes
     if (titleRef.current) {
       titleRef.current.style.height = 'auto'
@@ -97,6 +107,18 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
       }
     }
     fetchSources()
+  }, [todo.id])
+
+  useEffect(() => {
+    async function fetchSubtasks() {
+      try {
+        const subs = await window.api.quickTodos.getSubtasks(todo.id)
+        setSubtasks(subs)
+      } catch (err) {
+        console.error('Failed to fetch subtasks:', err)
+      }
+    }
+    fetchSubtasks()
   }, [todo.id])
 
   // Refetch documents when Obsidian browser closes (after import)
@@ -177,6 +199,27 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     }
   }
 
+  const handleStatusChange = async (newStatus: 'todo' | 'in_progress' | 'done') => {
+    setStatus(newStatus)
+    try {
+      await updateTodo(todo.id, { status: newStatus })
+      useCalendarStore.getState().fetchItems()
+    } catch (err) {
+      console.error('Failed to update status:', err)
+      setStatus(todo.status)
+    }
+  }
+
+  const handlePriorityChange = async (newPriority: 'low' | 'medium' | 'high' | null) => {
+    setPriority(newPriority)
+    try {
+      await updateTodo(todo.id, { priority: newPriority })
+    } catch (err) {
+      console.error('Failed to update priority:', err)
+      setPriority(todo.priority)
+    }
+  }
+
   const formatDueDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const today = new Date()
@@ -192,7 +235,7 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
-  const isOverdue = dueDate && !todo.completed && new Date(dueDate) < new Date(new Date().toDateString())
+  const isOverdue = dueDate && status !== 'done' && new Date(dueDate) < new Date(new Date().toDateString())
 
   const handleDeleteDocument = async (docId: string) => {
     try {
@@ -367,6 +410,49 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     }
   }
 
+  // Subtask handlers
+  const handleAddSubtask = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newSubtask.trim()) return
+
+    try {
+      const subtask = await window.api.quickTodos.create({
+        title: newSubtask.trim(),
+        list: todo.list, // Inherit parent's list
+        parent_quick_todo_id: todo.id
+      })
+      setSubtasks((prev) => [...prev, subtask])
+      setNewSubtask('')
+      setIsAddingSubtask(false)
+    } catch (err) {
+      console.error('Failed to add subtask:', err)
+    }
+  }
+
+  const handleToggleSubtask = async (subtask: QuickTodo) => {
+    try {
+      const updated = await window.api.quickTodos.update(subtask.id, {
+        completed: !subtask.completed
+      })
+      setSubtasks((prev) =>
+        prev.map((s) => (s.id === subtask.id ? updated : s))
+      )
+    } catch (err) {
+      console.error('Failed to toggle subtask:', err)
+    }
+  }
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    try {
+      await window.api.quickTodos.delete(subtaskId)
+      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId))
+    } catch (err) {
+      console.error('Failed to delete subtask:', err)
+    }
+  }
+
+  const completedSubtasks = subtasks.filter((s) => s.completed).length
+
   const handleOpenSourceExternal = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -395,6 +481,19 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
+
+  const statusOptions: { value: 'todo' | 'in_progress' | 'done'; label: string; color: string }[] = [
+    { value: 'todo', label: 'To Do', color: 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border' },
+    { value: 'in_progress', label: 'In Progress', color: 'bg-helm-primary/20 text-helm-primary border border-helm-primary/30' },
+    { value: 'done', label: 'Done', color: 'bg-helm-success/20 text-helm-success border border-helm-success/30' }
+  ]
+
+  const priorityOptions: { value: 'low' | 'medium' | 'high' | null; label: string; activeColor: string }[] = [
+    { value: null, label: 'None', activeColor: 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border' },
+    { value: 'low', label: 'Low', activeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30' },
+    { value: 'medium', label: 'Medium', activeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30' },
+    { value: 'high', label: 'High', activeColor: 'bg-red-500/20 text-red-400 border border-red-500/30' }
+  ]
 
   const getListLabel = (list: QuickTodo['list']) => {
     switch (list) {
@@ -465,6 +564,50 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
           </span>
         </div>
 
+        {/* Status */}
+        <div>
+          <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+            Status
+          </label>
+          <div className="flex gap-2">
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleStatusChange(opt.value)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  status === opt.value
+                    ? opt.color
+                    : 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border hover:text-helm-text hover:border-helm-text-muted'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Priority */}
+        <div>
+          <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+            Priority
+          </label>
+          <div className="flex gap-2">
+            {priorityOptions.map((opt) => (
+              <button
+                key={opt.value ?? 'none'}
+                onClick={() => handlePriorityChange(opt.value)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  priority === opt.value
+                    ? opt.activeColor
+                    : 'bg-helm-surface-elevated text-helm-text-muted border border-helm-border hover:text-helm-text hover:border-helm-text-muted'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Due Date */}
         <div>
           <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
@@ -505,6 +648,84 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
               </div>
             )}
           </div>
+        </div>
+
+        {/* Subtasks */}
+        <div>
+          <button
+            onClick={() => setShowSubtasks(!showSubtasks)}
+            className="flex items-center gap-2 text-xs font-medium text-helm-text-muted uppercase tracking-wider mb-2 hover:text-helm-text transition-colors"
+          >
+            {showSubtasks ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Subtasks
+            {subtasks.length > 0 && (
+              <span className="text-helm-text-muted">
+                ({completedSubtasks}/{subtasks.length})
+              </span>
+            )}
+          </button>
+
+          {showSubtasks && (
+            <div className="space-y-2">
+              {subtasks.map((subtask) => (
+                <div
+                  key={subtask.id}
+                  className="flex items-center gap-2 p-2 bg-helm-bg border border-helm-border rounded-lg group"
+                >
+                  <button
+                    onClick={() => handleToggleSubtask(subtask)}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                      subtask.completed
+                        ? 'bg-helm-primary border-helm-primary text-white'
+                        : 'border-helm-border hover:border-helm-primary'
+                    }`}
+                  >
+                    {subtask.completed && <Check size={10} />}
+                  </button>
+                  <span
+                    className={`flex-1 text-sm truncate ${
+                      subtask.completed ? 'text-helm-text-muted line-through' : 'text-helm-text'
+                    }`}
+                  >
+                    {subtask.title}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteSubtask(subtask.id)}
+                    className="p-1 text-helm-text-muted hover:text-helm-error opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+
+              {isAddingSubtask ? (
+                <form onSubmit={handleAddSubtask} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubtask}
+                    onChange={(e) => setNewSubtask(e.target.value)}
+                    placeholder="Subtask title..."
+                    autoFocus
+                    className="flex-1 px-3 py-1.5 bg-helm-bg border border-helm-border rounded-lg text-sm text-helm-text placeholder:text-helm-text-muted focus:border-helm-primary focus:ring-1 focus:ring-helm-primary outline-none transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-helm-primary hover:bg-helm-primary-hover text-white text-sm rounded-lg transition-colors"
+                  >
+                    Add
+                  </button>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setIsAddingSubtask(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-helm-text-muted hover:text-helm-text hover:bg-helm-bg rounded-lg transition-colors w-full"
+                >
+                  <Plus size={14} />
+                  Add subtask
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Description */}

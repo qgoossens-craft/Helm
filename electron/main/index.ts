@@ -293,6 +293,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:quickTodos:create', (_, todo) => db.quickTodos.create(todo))
   ipcMain.handle('db:quickTodos:update', (_, id: string, updates) => db.quickTodos.update(id, updates))
   ipcMain.handle('db:quickTodos:delete', (_, id: string) => db.quickTodos.delete(id))
+  ipcMain.handle('db:quickTodos:getSubtasks', (_, parentId: string) => db.quickTodos.getSubtasks(parentId))
 
   // QuickTodos Recurrence
   ipcMain.handle('db:quickTodos:getRecurring', (_, list?: 'personal' | 'work' | 'tweaks') => db.quickTodos.getRecurring(list))
