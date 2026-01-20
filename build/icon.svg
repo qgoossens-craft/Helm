@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a5f"/>
+      <stop offset="100%" style="stop-color:#0d1f33"/>
+    </linearGradient>
+    <linearGradient id="wheelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/>
+      <stop offset="100%" style="stop-color:#e2e8f0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="url(#bgGrad)"/>
+
+  <!-- Outer ring -->
+  <circle cx="512" cy="512" r="320" fill="none" stroke="url(#wheelGrad)" stroke-width="48"/>
+
+  <!-- Inner ring -->
+  <circle cx="512" cy="512" r="120" fill="none" stroke="url(#wheelGrad)" stroke-width="40"/>
+
+  <!-- Center hub -->
+  <circle cx="512" cy="512" r="50" fill="url(#wheelGrad)"/>
+
+  <!-- 8 spokes -->
+  <g fill="url(#wheelGrad)">
+    <!-- Top spoke -->
+    <rect x="488" y="200" width="48" height="192" rx="24"/>
+    <!-- Bottom spoke -->
+    <rect x="488" y="632" width="48" height="192" rx="24"/>
+    <!-- Left spoke -->
+    <rect x="200" y="488" width="192" height="48" rx="24"/>
+    <!-- Right spoke -->
+    <rect x="632" y="488" width="192" height="48" rx="24"/>
+
+    <!-- Diagonal spokes -->
+    <!-- Top-right -->
+    <rect x="488" y="200" width="48" height="192" rx="24" transform="rotate(45 512 512)"/>
+    <!-- Bottom-left -->
+    <rect x="488" y="632" width="48" height="192" rx="24" transform="rotate(45 512 512)"/>
+    <!-- Top-left -->
+    <rect x="200" y="488" width="192" height="48" rx="24" transform="rotate(45 512 512)"/>
+    <!-- Bottom-right -->
+    <rect x="632" y="488" width="192" height="48" rx="24" transform="rotate(45 512 512)"/>
+  </g>
+
+  <!-- Spoke handles (knobs on outer ring) -->
+  <g fill="url(#wheelGrad)">
+    <circle cx="512" cy="168" r="36"/>
+    <circle cx="512" cy="856" r="36"/>
+    <circle cx="168" cy="512" r="36"/>
+    <circle cx="856" cy="512" r="36"/>
+    <circle cx="268" cy="268" r="36"/>
+    <circle cx="756" cy="756" r="36"/>
+    <circle cx="756" cy="268" r="36"/>
+    <circle cx="268" cy="756" r="36"/>
+  </g>
+</svg>
