@@ -275,6 +275,24 @@ function runMigrations(db: Database.Database): void {
     console.log('Migration: Added status column to quick_todos')
   }
 
+  // Migration: Add reminder_time column to tasks table
+  const tasksInfoReminder = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>
+  const taskColumnsReminder = tasksInfoReminder.map(col => col.name)
+
+  if (!taskColumnsReminder.includes('reminder_time')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN reminder_time TEXT DEFAULT NULL`)
+    console.log('Migration: Added reminder_time column to tasks')
+  }
+
+  // Migration: Add reminder_time column to quick_todos table
+  const quickTodosInfoReminder = db.prepare("PRAGMA table_info(quick_todos)").all() as Array<{ name: string }>
+  const quickTodosColumnsReminder = quickTodosInfoReminder.map(col => col.name)
+
+  if (!quickTodosColumnsReminder.includes('reminder_time')) {
+    db.exec(`ALTER TABLE quick_todos ADD COLUMN reminder_time TEXT DEFAULT NULL`)
+    console.log('Migration: Added reminder_time column to quick_todos')
+  }
+
   // Migration: Create recurring_completions table for tracking daily completions of recurring items
   db.exec(`
     CREATE TABLE IF NOT EXISTS recurring_completions (
@@ -420,6 +438,7 @@ interface Task {
   recurrence_config: string | null
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  reminder_time: string | null  // Format: "HH:MM" in 24-hour format
 }
 
 interface ActivityLogEntry {
@@ -492,6 +511,7 @@ interface QuickTodo {
   recurrence_config: string | null
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  reminder_time: string | null  // Format: "HH:MM" in 24-hour format
   // Subtask field
   parent_quick_todo_id: string | null
 }
@@ -698,8 +718,8 @@ export const db = {
       const order = task.order ?? orderResult.next_order
 
       const stmt = getDb().prepare(`
-        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (id, project_id, parent_task_id, title, description, status, priority, "order", category, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, reminder_time, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -717,6 +737,7 @@ export const db = {
         task.recurrence_config || null,
         task.recurring_parent_id || null,
         task.recurrence_end_date || null,
+        task.reminder_time || null,
         timestamp,
         timestamp
       )
@@ -791,6 +812,10 @@ export const db = {
       if (updates.recurrence_end_date !== undefined) {
         fields.push('recurrence_end_date = ?')
         values.push(updates.recurrence_end_date)
+      }
+      if (updates.reminder_time !== undefined) {
+        fields.push('reminder_time = ?')
+        values.push(updates.reminder_time)
       }
 
       fields.push('updated_at = ?')
@@ -1375,15 +1400,15 @@ export const db = {
       return stmt.all(today).map(this._mapRow) as QuickTodo[]
     },
 
-    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config?: string | null; recurring_parent_id?: string | null; recurrence_end_date?: string | null; parent_quick_todo_id?: string | null }): QuickTodo {
+    create(todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; recurrence_pattern?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config?: string | null; recurring_parent_id?: string | null; recurrence_end_date?: string | null; reminder_time?: string | null; parent_quick_todo_id?: string | null }): QuickTodo {
       const id = generateId()
       const timestamp = now()
       const status = todo.status || 'todo'
       const completed = status === 'done' ? 1 : 0
 
       const stmt = getDb().prepare(`
-        INSERT INTO quick_todos (id, title, description, list, status, priority, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, parent_quick_todo_id, completed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO quick_todos (id, title, description, list, status, priority, due_date, recurrence_pattern, recurrence_config, recurring_parent_id, recurrence_end_date, reminder_time, parent_quick_todo_id, completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -1398,6 +1423,7 @@ export const db = {
         todo.recurrence_config || null,
         todo.recurring_parent_id || null,
         todo.recurrence_end_date || null,
+        todo.reminder_time || null,
         todo.parent_quick_todo_id || null,
         completed,
         timestamp,
@@ -1407,7 +1433,7 @@ export const db = {
       return this.getById(id)!
     },
 
-    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config: string | null; recurrence_end_date: string | null }>): QuickTodo {
+    update(id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'yearly' | null; recurrence_config: string | null; recurrence_end_date: string | null; reminder_time: string | null }>): QuickTodo {
       const current = this.getById(id)
       if (!current) throw new Error(`QuickTodo ${id} not found`)
 
@@ -1479,6 +1505,10 @@ export const db = {
       if (updates.recurrence_end_date !== undefined) {
         fields.push('recurrence_end_date = ?')
         values.push(updates.recurrence_end_date)
+      }
+      if (updates.reminder_time !== undefined) {
+        fields.push('reminder_time = ?')
+        values.push(updates.reminder_time)
       }
 
       fields.push('updated_at = ?')

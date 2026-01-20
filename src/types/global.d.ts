@@ -46,6 +46,7 @@ export interface Task {
   recurrence_config: string | null  // JSON stringified RecurrenceConfig
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  reminder_time: string | null  // Format: "HH:MM" in 24-hour format
 }
 
 export interface ActivityLogEntry {
@@ -153,6 +154,7 @@ export interface QuickTodo {
   recurrence_config: string | null  // JSON stringified RecurrenceConfig
   recurring_parent_id: string | null
   recurrence_end_date: string | null
+  reminder_time: string | null  // Format: "HH:MM" in 24-hour format
   // Subtask field
   parent_quick_todo_id: string | null
 }
@@ -290,7 +292,7 @@ declare global {
         getDueToday: () => Promise<QuickTodo[]>
         getOverdue: () => Promise<QuickTodo[]>
         create: (todo: { title: string; list: 'personal' | 'work' | 'tweaks'; description?: string | null; status?: 'todo' | 'in_progress' | 'done'; priority?: 'low' | 'medium' | 'high' | null; due_date?: string | null; parent_quick_todo_id?: string | null }) => Promise<QuickTodo>
-        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null }>) => Promise<QuickTodo>
+        update: (id: string, updates: Partial<{ title: string; description: string | null; list: 'personal' | 'work' | 'tweaks'; status: 'todo' | 'in_progress' | 'done'; priority: 'low' | 'medium' | 'high' | null; due_date: string | null; completed: boolean; recurrence_pattern: RecurrencePattern | null; recurrence_config: string | null; recurrence_end_date: string | null; reminder_time: string | null }>) => Promise<QuickTodo>
         delete: (id: string) => Promise<void>
         getSubtasks: (parentId: string) => Promise<QuickTodo[]>
         // Batch methods to prevent N+1 queries

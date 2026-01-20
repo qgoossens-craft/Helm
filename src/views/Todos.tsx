@@ -101,6 +101,14 @@ export function Todos() {
     }
   }
 
+  const handleSetReminderTime = async (id: string, reminderTime: string | null) => {
+    try {
+      await updateTodo(id, { reminder_time: reminderTime })
+    } catch (err) {
+      console.error('Failed to set reminder time:', err)
+    }
+  }
+
   return (
     <div className="h-full flex gap-3">
       {/* Main content */}
@@ -182,6 +190,7 @@ export function Todos() {
                     onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
                     onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
                     onSetRecurrence={(pattern, config, endDate) => handleSetRecurrence(todo.id, pattern, config, endDate)}
+                    onSetReminderTime={(time) => handleSetReminderTime(todo.id, time)}
                   />
                 ))}
 
@@ -203,6 +212,7 @@ export function Todos() {
                         onSetDueDate={(date) => handleSetDueDate(todo.id, date)}
                         onSetPriority={(priority) => handleSetPriority(todo.id, priority)}
                         onSetRecurrence={(pattern, config, endDate) => handleSetRecurrence(todo.id, pattern, config, endDate)}
+                        onSetReminderTime={(time) => handleSetReminderTime(todo.id, time)}
                       />
                     ))}
                   </>
@@ -242,9 +252,10 @@ interface TodoItemProps {
   onSetDueDate: (date: string | null) => void
   onSetPriority: (priority: Priority | null) => void
   onSetRecurrence: (pattern: RecurrencePattern | null, config: string | null, endDate: string | null) => void
+  onSetReminderTime: (time: string | null) => void
 }
 
-function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate, onSetPriority, onSetRecurrence }: TodoItemProps) {
+function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate, onSetPriority, onSetRecurrence, onSetReminderTime }: TodoItemProps) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
   const isRecurring = !!todo.recurrence_pattern
@@ -355,6 +366,8 @@ function TodoItem({ todo, isSelected, onSelect, onToggle, onDelete, onSetDueDate
             config={todo.recurrence_config}
             endDate={todo.recurrence_end_date}
             onRecurrenceChange={onSetRecurrence}
+            reminderTime={todo.reminder_time}
+            onReminderTimeChange={onSetReminderTime}
           />
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Repeat } from 'lucide-react'
 import type { RecurrencePattern } from '../types/global'
+import { ReminderTimeSelector } from './ReminderTimeSelector'
 
 export interface RecurrenceConfig {
   weekDays?: number[]
@@ -18,6 +19,8 @@ interface RecurrenceSelectorProps {
     config: string | null,
     endDate: string | null
   ) => void
+  reminderTime?: string | null
+  onReminderTimeChange?: (time: string | null) => void
   className?: string
 }
 
@@ -33,6 +36,8 @@ export function RecurrenceSelector({
   config,
   endDate,
   onRecurrenceChange,
+  reminderTime,
+  onReminderTimeChange,
   className = ''
 }: RecurrenceSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -163,6 +168,22 @@ export function RecurrenceSelector({
                     min={new Date().toISOString().split('T')[0]}
                   />
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Reminder time section - only show when a pattern is selected and handler is provided */}
+          {pattern && onReminderTimeChange && (
+            <>
+              <div className="border-t border-helm-border my-1" />
+              <div className="px-3 py-2">
+                <label className="text-sm text-helm-text-muted block mb-2">
+                  Daily reminder
+                </label>
+                <ReminderTimeSelector
+                  value={reminderTime ?? null}
+                  onChange={onReminderTimeChange}
+                />
               </div>
             </>
           )}

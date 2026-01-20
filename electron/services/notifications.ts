@@ -15,6 +15,12 @@ import {
 // Store scheduled notification timeouts
 const scheduledNotifications = new Map<string, NodeJS.Timeout>()
 
+// Store scheduled reminder timeouts
+const scheduledReminders = new Map<string, NodeJS.Timeout>()
+
+// Track reminders already sent today (to prevent duplicates)
+const sentRemindersToday = new Set<string>()
+
 // Main window reference for IPC
 let mainWindow: BrowserWindow | null = null
 
@@ -181,18 +187,239 @@ export function notifyDueItems(): void {
 }
 
 /**
+ * Get items with reminder_time set that are due today (recurring items with occurrences today)
+ */
+interface ReminderItem {
+  type: 'task' | 'todo'
+  id: string
+  title: string
+  reminderTime: string  // "HH:MM" format
+  list?: string
+}
+
+function getItemsWithRemindersForToday(): ReminderItem[] {
+  const today = formatDateISO(new Date())
+  const items: ReminderItem[] = []
+
+  // Get recurring tasks with reminder_time set
+  const recurringTasks = db.tasks.getRecurring()
+  for (const task of recurringTasks) {
+    if (task.recurrence_pattern && task.reminder_time) {
+      const recurringItem: RecurringItem = {
+        id: task.id,
+        title: task.title,
+        due_date: task.due_date,
+        recurrence_pattern: task.recurrence_pattern as RecurrencePattern,
+        recurrence_config: task.recurrence_config,
+        recurrence_end_date: task.recurrence_end_date,
+        recurring_parent_id: task.recurring_parent_id
+      }
+
+      // Check if this recurring task has an occurrence today
+      const todayStart = new Date(today)
+      const todayEnd = new Date(today)
+      todayEnd.setHours(23, 59, 59, 999)
+
+      const occurrences = generateOccurrences(recurringItem, todayStart, todayEnd)
+      if (occurrences.length > 0) {
+        items.push({
+          type: 'task',
+          id: task.id,
+          title: task.title,
+          reminderTime: task.reminder_time
+        })
+      }
+    }
+  }
+
+  // Get recurring todos with reminder_time set
+  const recurringTodos = db.quickTodos.getRecurring()
+  for (const todo of recurringTodos) {
+    if (todo.recurrence_pattern && todo.reminder_time) {
+      const recurringItem: RecurringItem = {
+        id: todo.id,
+        title: todo.title,
+        due_date: todo.due_date,
+        recurrence_pattern: todo.recurrence_pattern as RecurrencePattern,
+        recurrence_config: todo.recurrence_config,
+        recurrence_end_date: todo.recurrence_end_date,
+        recurring_parent_id: todo.recurring_parent_id
+      }
+
+      // Check if this recurring todo has an occurrence today
+      const todayStart = new Date(today)
+      const todayEnd = new Date(today)
+      todayEnd.setHours(23, 59, 59, 999)
+
+      const occurrences = generateOccurrences(recurringItem, todayStart, todayEnd)
+      if (occurrences.length > 0) {
+        items.push({
+          type: 'todo',
+          id: todo.id,
+          title: todo.title,
+          reminderTime: todo.reminder_time,
+          list: todo.list
+        })
+      }
+    }
+  }
+
+  return items
+}
+
+/**
+ * Calculate milliseconds until a specific time today
+ * Returns negative number if time has already passed
+ */
+function getDelayUntilTime(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(':').map(Number)
+  const now = new Date()
+  const targetTime = new Date()
+  targetTime.setHours(hours, minutes, 0, 0)
+  return targetTime.getTime() - now.getTime()
+}
+
+/**
+ * Format 24-hour time to 12-hour format for display
+ */
+function formatTime12Hour(timeStr: string): string {
+  const [hours, minutes] = timeStr.split(':').map(Number)
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const displayHours = hours % 12 || 12
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+}
+
+/**
+ * Send a reminder notification for a specific item
+ */
+function sendReminderNotification(item: ReminderItem): void {
+  const today = formatDateISO(new Date())
+  const reminderKey = `${item.type}-${item.id}-${today}-${item.reminderTime}`
+
+  // Skip if already sent today
+  if (sentRemindersToday.has(reminderKey)) {
+    return
+  }
+
+  // Mark as sent
+  sentRemindersToday.add(reminderKey)
+
+  // Send OS notification
+  const typeLabel = item.type === 'task' ? 'Task' : 'Todo'
+  const timeFormatted = formatTime12Hour(item.reminderTime)
+  sendOSNotification(
+    `Reminder: ${item.title}`,
+    `${typeLabel} reminder set for ${timeFormatted}`,
+    () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.focus()
+      }
+    }
+  )
+
+  // Send in-app notification
+  sendInAppNotification({
+    id: reminderKey,
+    type: item.type,
+    title: item.title,
+    message: `Reminder scheduled for ${timeFormatted}`,
+    dueDate: today,
+    parentId: item.id
+  })
+
+  console.log(`Reminder sent for ${item.type} "${item.title}" at ${timeFormatted}`)
+}
+
+/**
+ * Schedule reminders for all items due today
+ * Called on startup and hourly to catch any new items
+ */
+export function scheduleRemindersForToday(): void {
+  const items = getItemsWithRemindersForToday()
+  const today = formatDateISO(new Date())
+
+  for (const item of items) {
+    const reminderKey = `${item.type}-${item.id}-${today}-${item.reminderTime}`
+
+    // Skip if already scheduled or already sent
+    if (scheduledReminders.has(reminderKey) || sentRemindersToday.has(reminderKey)) {
+      continue
+    }
+
+    const delay = getDelayUntilTime(item.reminderTime)
+
+    // If the time hasn't passed yet, schedule the reminder
+    if (delay > 0) {
+      const timeout = setTimeout(() => {
+        sendReminderNotification(item)
+        scheduledReminders.delete(reminderKey)
+      }, delay)
+
+      scheduledReminders.set(reminderKey, timeout)
+      console.log(`Scheduled reminder for ${item.type} "${item.title}" at ${item.reminderTime} (in ${Math.round(delay / 60000)} minutes)`)
+    }
+  }
+}
+
+/**
+ * Reset daily reminder state at midnight
+ */
+export function resetDailyReminderState(): void {
+  // Clear all scheduled reminders
+  for (const timeout of scheduledReminders.values()) {
+    clearTimeout(timeout)
+  }
+  scheduledReminders.clear()
+
+  // Clear the sent reminders tracking
+  sentRemindersToday.clear()
+
+  console.log('Daily reminder state reset')
+
+  // Re-schedule for the new day
+  scheduleRemindersForToday()
+}
+
+/**
+ * Calculate milliseconds until next midnight
+ */
+function getDelayUntilMidnight(): number {
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  tomorrow.setHours(0, 0, 0, 0)
+  return tomorrow.getTime() - now.getTime()
+}
+
+/**
  * Schedule daily notification check
  * Runs at startup and then every hour
  */
 let notificationInterval: NodeJS.Timeout | null = null
+let midnightResetTimeout: NodeJS.Timeout | null = null
 
 export function startNotificationScheduler(): void {
   // Run immediately on startup
   notifyDueItems()
 
-  // Then run every hour
+  // Schedule reminders for today
+  scheduleRemindersForToday()
+
+  // Schedule midnight reset
+  const delayToMidnight = getDelayUntilMidnight()
+  midnightResetTimeout = setTimeout(() => {
+    resetDailyReminderState()
+    // Schedule the next midnight reset
+    midnightResetTimeout = setInterval(() => {
+      resetDailyReminderState()
+    }, 24 * 60 * 60 * 1000)
+  }, delayToMidnight)
+
+  // Then run every hour (for recurring notifications and new reminder items)
   notificationInterval = setInterval(() => {
     notifyDueItems()
+    scheduleRemindersForToday()
   }, 60 * 60 * 1000)
 
   console.log('Notification scheduler started')
@@ -204,11 +431,24 @@ export function stopNotificationScheduler(): void {
     notificationInterval = null
   }
 
+  // Clear midnight reset timeout
+  if (midnightResetTimeout) {
+    clearTimeout(midnightResetTimeout)
+    midnightResetTimeout = null
+  }
+
   // Clear all scheduled notifications
   for (const timeout of scheduledNotifications.values()) {
     clearTimeout(timeout)
   }
   scheduledNotifications.clear()
+
+  // Clear all scheduled reminders
+  for (const timeout of scheduledReminders.values()) {
+    clearTimeout(timeout)
+  }
+  scheduledReminders.clear()
+  sentRemindersToday.clear()
 
   console.log('Notification scheduler stopped')
 }

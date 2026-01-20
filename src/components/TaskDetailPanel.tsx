@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { useTasksStore, useUIStore, useSettingsStore, useCalendarStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
 import { CategorySelector } from './CategorySelector'
+import { RecurrenceSelector, RecurrenceIndicator } from './RecurrenceSelector'
 import { PRIORITY_LEVELS, type Priority } from '../lib/priorityConstants'
 import type { Task, Document, Source } from '../types/global'
 
@@ -651,6 +652,54 @@ export function TaskDetailPanel({ task, onClose, projectId, focusTitle }: TaskDe
             )}
           </div>
         </div>
+
+        {/* Recurrence - only for non-instance items */}
+        {!task.recurring_parent_id && (
+          <div>
+            <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+              Recurrence
+            </label>
+            <div className="flex items-center gap-2">
+              <RecurrenceSelector
+                pattern={task.recurrence_pattern}
+                config={task.recurrence_config}
+                endDate={task.recurrence_end_date}
+                onRecurrenceChange={async (pattern, config, endDate) => {
+                  try {
+                    await updateTask(task.id, {
+                      recurrence_pattern: pattern,
+                      recurrence_config: config,
+                      recurrence_end_date: endDate
+                    })
+                  } catch (err) {
+                    console.error('Failed to update recurrence:', err)
+                  }
+                }}
+                reminderTime={task.reminder_time}
+                onReminderTimeChange={async (time) => {
+                  try {
+                    await updateTask(task.id, { reminder_time: time })
+                  } catch (err) {
+                    console.error('Failed to update reminder time:', err)
+                  }
+                }}
+              />
+              {task.recurrence_pattern && (
+                <RecurrenceIndicator pattern={task.recurrence_pattern} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Show recurrence indicator for instances */}
+        {task.recurring_parent_id && (
+          <div>
+            <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+              Recurrence
+            </label>
+            <RecurrenceIndicator pattern={task.recurrence_pattern} isInstance={true} />
+          </div>
+        )}
 
         {/* Description */}
         <div>

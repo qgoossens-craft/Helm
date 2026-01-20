@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useQuickTodosStore, useUIStore, useSettingsStore } from '../store'
 import { MarkdownEditor } from './MarkdownEditor'
+import { RecurrenceSelector, RecurrenceIndicator } from './RecurrenceSelector'
 import type { QuickTodo, Document, Source } from '../types/global'
 
 interface PreviewState {
@@ -646,6 +647,54 @@ export function QuickTodoDetailPanel({ todo, onClose }: QuickTodoDetailPanelProp
             )}
           </div>
         </div>
+
+        {/* Recurrence - only for non-instance items */}
+        {!todo.recurring_parent_id && (
+          <div>
+            <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+              Recurrence
+            </label>
+            <div className="flex items-center gap-2">
+              <RecurrenceSelector
+                pattern={todo.recurrence_pattern}
+                config={todo.recurrence_config}
+                endDate={todo.recurrence_end_date}
+                onRecurrenceChange={async (pattern, config, endDate) => {
+                  try {
+                    await updateTodo(todo.id, {
+                      recurrence_pattern: pattern,
+                      recurrence_config: config,
+                      recurrence_end_date: endDate
+                    })
+                  } catch (err) {
+                    console.error('Failed to update recurrence:', err)
+                  }
+                }}
+                reminderTime={todo.reminder_time}
+                onReminderTimeChange={async (time) => {
+                  try {
+                    await updateTodo(todo.id, { reminder_time: time })
+                  } catch (err) {
+                    console.error('Failed to update reminder time:', err)
+                  }
+                }}
+              />
+              {todo.recurrence_pattern && (
+                <RecurrenceIndicator pattern={todo.recurrence_pattern} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Show recurrence indicator for instances */}
+        {todo.recurring_parent_id && (
+          <div>
+            <label className="text-xs font-medium text-helm-text-muted uppercase tracking-wider block mb-2">
+              Recurrence
+            </label>
+            <RecurrenceIndicator pattern={todo.recurrence_pattern} isInstance={true} />
+          </div>
+        )}
 
         {/* Subtasks */}
         <div>
